@@ -31,6 +31,7 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
                 },
             },
             "required": ["query"],
+            "additionalProperties": False,
         },
     ),
     "code_analysis": ToolSpec(
@@ -50,6 +51,7 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
                 },
             },
             "required": ["code"],
+            "additionalProperties": False,
         },
     ),
     "code_execution": ToolSpec(
@@ -73,6 +75,7 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
                 },
             },
             "required": ["code"],
+            "additionalProperties": False,
         },
     ),
 }
