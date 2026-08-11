@@ -1,12 +1,37 @@
 """Answer Synthesizer: drafts a response to the user's query, given whatever
 evidence the Tool Executor produced (or no evidence, if no tool was needed).
 
-No grounding/hedging policy yet - the Controlled-Access layer that restricts
-claims to sourced evidence is added on top of this in Day 6.
+When evidence is present, the Controlled-Access policy below restricts the
+synthesizer to facts the evidence actually supports - anything else must be
+hedged rather than filled in from the model's own training knowledge.
 """
 import ollama
 
 from src.config import OLLAMA_HOST, PRIMARY_MODEL
+
+_CONTROLLED_ACCESS_POLICY = (
+    "Base your answer only on the evidence below - never add facts from "
+    "outside knowledge, even if you believe them to be true. If the "
+    "evidence fully answers the question, answer normally with no "
+    "disclaimer. If part or all of the question isn't addressed by the "
+    "evidence, say plainly which specific part is unsupported instead of "
+    "guessing - don't add a blanket disclaimer to an answer that IS "
+    "supported by the evidence."
+)
+
+
+def _format_evidence(evidence: dict) -> str:
+    """Render evidence as readable text instead of a raw Python repr.
+
+    doc_rag's result is a list of {"text", "source", "distance"} hits, whose
+    default repr mashes multiple docs' text into one hard-to-parse blob -
+    format those explicitly, one labeled passage per hit. The other tools'
+    results are already small, flat dicts, so their default repr is fine.
+    """
+    result = evidence["result"]
+    if evidence["tool"] == "doc_rag":
+        return "\n\n".join(f"[source: {hit['source']}]\n{hit['text']}" for hit in result)
+    return str(result)
 
 
 def _build_prompt(query: str, evidence: dict | None) -> str:
@@ -14,10 +39,9 @@ def _build_prompt(query: str, evidence: dict | None) -> str:
         return f"Answer the user's question directly and concisely.\n\nQuestion: {query}"
 
     return (
-        f"Answer the user's question using the evidence below from the "
-        f"'{evidence['tool']}' tool.\n\n"
+        f"{_CONTROLLED_ACCESS_POLICY}\n\n"
         f"Question: {query}\n\n"
-        f"Evidence:\n{evidence['result']}"
+        f"Evidence from the '{evidence['tool']}' tool:\n{_format_evidence(evidence)}"
     )
 
 
