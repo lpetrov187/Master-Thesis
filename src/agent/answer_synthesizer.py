@@ -46,7 +46,16 @@ def _build_prompt(query: str, evidence: dict | None) -> str:
 
 
 def synthesize(query: str, evidence: dict | None = None, client: ollama.Client | None = None) -> str:
-    """Draft a plain-text answer to `query`, informed by `evidence` if given."""
+    """Draft a plain-text answer to `query`, informed by `evidence` if given.
+
+    If the tool that produced `evidence` failed, report that directly
+    instead of calling the model on evidence that isn't actually there -
+    we already know the fact ("the tool failed"), so there's nothing an
+    LLM call would add.
+    """
+    if evidence is not None and evidence.get("error"):
+        return f"I couldn't answer this because the '{evidence['tool']}' tool failed: {evidence['error']}"
+
     client = client or ollama.Client(host=OLLAMA_HOST)
     response = client.chat(
         model=PRIMARY_MODEL,

@@ -11,7 +11,19 @@ _TOOL_FUNCTIONS = {
 
 
 def execute_tool(tool_name: str, args: dict) -> dict:
-    """Run the named tool with `args`. Returns {"tool", "args", "result"}."""
+    """Run the named tool with `args`.
+
+    Returns {"tool", "args", "result", "error"}. If the tool itself raises,
+    `result` is None and `error` describes what went wrong instead of the
+    exception propagating - a failed tool run is still structured evidence
+    for the pipeline to react to, not a crash.
+    """
     fn = _TOOL_FUNCTIONS[tool_name]
-    result = fn(**args)
-    return {"tool": tool_name, "args": args, "result": result}
+    try:
+        result = fn(**args)
+        error = None
+    except Exception as exc:  # noqa: BLE001 - tools are an external-call boundary
+        result = None
+        error = f"{type(exc).__name__}: {exc}"
+
+    return {"tool": tool_name, "args": args, "result": result, "error": error}
