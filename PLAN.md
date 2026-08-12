@@ -69,6 +69,7 @@ Log every step — the trace log is both your debugging tool and your evaluation
 - Ablation: RAG-only vs. verifier-only vs. both, to isolate each mechanism's individual contribution — strong, easy-to-write experiments content.
 - Swap in Qwen2.5-Coder as the primary model for a full second run, not just spot checks.
 - Replace/augment manual hallucination annotation with an LLM-judge validated against a human-labeled subset.
+- **Known gap (Day 10 full run, 2026-08-12): Request Analyzer accuracy.** 8/24 eval tasks (33%) were misclassified as `needs_tool: False` when a tool was expected — every single tool-selection miss in the run traces back to this one stage; the Tool Selector itself was never wrong when actually invoked. Notably this includes 3 tasks with an actual code block in the query, despite Day 5's few-shot prompt being built specifically to catch that case (a 5-query manual spot check at the time didn't reveal this failure rate). Candidate stretch work: revisit `request_analyzer.py`'s prompt, or run this specific failure mode as its own ablation.
 
 ## Verification / "done" criteria
 - Orchestration loop runs end-to-end on a real query, producing a trace log through all 5 stages.
