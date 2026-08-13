@@ -6,12 +6,12 @@
 
 | Metric | Value |
 |---|---|
-| Tool-selection accuracy | 95.8% |
-| Agent hallucination rate | 0.0% |
-| Baseline hallucination rate | 8.3% |
-| Agent task success rate | 100.0% |
-| Baseline task success rate | 83.3% |
-| Groundedness score (mean, n=23) | 0.845 (min 0.500, max 1.000) |
+| Tool-selection accuracy | 66.7% |
+| Agent hallucination rate | 16.7% |
+| Baseline hallucination rate | 16.7% |
+| Agent task success rate | 83.3% |
+| Baseline task success rate | 75.0% |
+| Groundedness score (mean, n=16) | 0.800 (min 0.500, max 1.000) |
 
 ## Agent hallucination breakdown
 
@@ -19,12 +19,14 @@
 
 | Category | Count |
 |---|---|
-| none | 24 |
+| evidence_corruption | 2 |
+| none | 20 |
+| synthesis | 2 |
 
 ## By task category
 
 | Category | n | Tool acc. | Agent halluc. | Baseline halluc. | Agent success | Baseline success |
 |---|---|---|---|---|---|---|
-| code_analysis | 8 | 100.0% | 0.0% | 12.5% | 100.0% | 75.0% |
-| doc_search | 8 | 87.5% | 0.0% | 12.5% | 100.0% | 75.0% |
-| programming_problem | 8 | 100.0% | 0.0% | 0.0% | 100.0% | 100.0% |
+| code_analysis | 8 | 87.5% | 25.0% | 12.5% | 75.0% | 62.5% |
+| doc_search | 8 | 37.5% | 12.5% | 37.5% | 87.5% | 62.5% |
+| programming_problem | 8 | 75.0% | 12.5% | 0.0% | 87.5% | 100.0% |

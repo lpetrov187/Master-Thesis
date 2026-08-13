@@ -23,3 +23,29 @@ def test_execute_tool_succeeds_normally():
 
     assert evidence["error"] is None
     assert evidence["result"]["syntax_valid"] is True
+
+
+def test_execute_tool_joins_line_array_into_source(monkeypatch):
+    """Day-12 fix: tool_registry's code schema is now an array of lines
+    (see PLAN.md's newline-escaping bug); execute_tool must join it back
+    into a real multi-line string before the tool function sees it."""
+    received = {}
+
+    def spy_tool(**kwargs):
+        received.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setitem(tool_executor._TOOL_FUNCTIONS, "code_analysis", spy_tool)
+
+    evidence = tool_executor.execute_tool(
+        "code_analysis", {"code": ["def add(a, b):", "    return a + b"]}
+    )
+
+    assert evidence["error"] is None
+    assert received["code"] == "def add(a, b):\n    return a + b"
+
+
+def test_execute_tool_leaves_plain_string_code_untouched():
+    evidence = tool_executor.execute_tool("code_analysis", {"code": "def f():\n    pass\n"})
+
+    assert evidence["error"] is None

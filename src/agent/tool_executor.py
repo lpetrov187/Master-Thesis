@@ -10,6 +10,14 @@ _TOOL_FUNCTIONS = {
 }
 
 
+def _denormalize_args(args: dict) -> dict:
+    """Undo the tool_registry "code" array-of-lines encoding (see Day 12
+    fix) back into the plain string the tool functions themselves expect."""
+    if isinstance(args.get("code"), list):
+        return {**args, "code": "\n".join(args["code"])}
+    return args
+
+
 def execute_tool(tool_name: str, args: dict) -> dict:
     """Run the named tool with `args`.
 
@@ -19,6 +27,7 @@ def execute_tool(tool_name: str, args: dict) -> dict:
     for the pipeline to react to, not a crash.
     """
     fn = _TOOL_FUNCTIONS[tool_name]
+    args = _denormalize_args(args)
     try:
         result = fn(**args)
         error = None

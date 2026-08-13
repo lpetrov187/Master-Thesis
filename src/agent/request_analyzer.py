@@ -27,19 +27,25 @@ def _build_prompt(query: str) -> str:
         '- "How do I configure connection pooling in SQLAlchemy?" '
         "(needs a documentation lookup, not a guess)\n"
         '- "How do I reuse a requests Session?" (needs a documentation lookup)\n'
+        '- "What is the recommended way to get a logger in a Python module?" '
+        "(asks about a specific library's recommended usage - needs a documentation lookup)\n"
         '- "Can you review this function for style issues?\\n\\ndef add(a,b): return a+b" '
-        "(needs to analyze the given code)\n"
+        "(contains a code snippet to analyze)\n"
+        '- "Is this code clean?\\n\\ndef greet():\\n    return f\'hi\'" '
+        "(contains a code snippet to analyze, even though the question is short)\n"
         '- "Run this and tell me what it prints:\\n\\nprint(sum(range(5)))" '
-        "(needs to execute the given code)\n\n"
+        "(contains a code snippet to execute)\n"
+        '- "What does this code output?\\n\\nfor i in range(3):\\n    print(i)" '
+        "(contains a code snippet to execute)\n\n"
         "Examples that do NOT need a tool:\n"
         '- "What\'s a friendly way to greet someone in an email?" (general knowledge)\n'
         '- "What is a for loop?" (general knowledge, no specific doc/code to check)\n\n'
-        "A tool is needed whenever the request either includes an actual "
-        "code snippet to review or run, or asks how to use/configure a "
-        "specific library or API (an answer that should be grounded in real "
-        "documentation rather than guessed from memory). A tool is NOT "
-        "needed for greetings, opinions, or generic explanations that don't "
-        "reference a specific library, API, or piece of code.\n\n"
+        "Rule of thumb: if the request contains an actual code snippet (even "
+        "a one-line one, even without a code block), it needs a tool - no "
+        "exceptions. If it names a specific library/API and asks how to use "
+        "or configure it, it needs a tool. A tool is NOT needed only for "
+        "greetings, opinions, or generic explanations with no specific "
+        "library, API, or code attached.\n\n"
         f"User request:\n{query}"
     )
 
@@ -51,5 +57,6 @@ def analyze_request(query: str, client: ollama.Client | None = None) -> dict:
         model=PRIMARY_MODEL,
         messages=[{"role": "user", "content": _build_prompt(query)}],
         format=_ANALYSIS_SCHEMA,
+        options={"temperature": 0.1},
     )
     return json.loads(response["message"]["content"])

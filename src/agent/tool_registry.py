@@ -46,8 +46,14 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
             "type": "object",
             "properties": {
                 "code": {
-                    "type": "string",
-                    "description": "The Python source code to analyze.",
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "The Python source code to analyze, split into one array "
+                        "element per line (no embedded newlines) - avoids the "
+                        "model mis-escaping literal newlines inside a single "
+                        "JSON string."
+                    ),
                 },
             },
             "required": ["code"],
@@ -66,8 +72,14 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
             "type": "object",
             "properties": {
                 "code": {
-                    "type": "string",
-                    "description": "The Python source code to execute.",
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "The Python source code to execute, split into one array "
+                        "element per line (no embedded newlines) - avoids the "
+                        "model mis-escaping literal newlines inside a single "
+                        "JSON string."
+                    ),
                 },
                 "stdin": {
                     "type": "string",

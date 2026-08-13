@@ -57,6 +57,7 @@ def select_tool(query: str, client: ollama.Client | None = None) -> dict:
         model=PRIMARY_MODEL,
         messages=[{"role": "user", "content": _build_prompt(query)}],
         format=_SELECTION_SCHEMA,
+        options={"temperature": 0.1},
     )
     result = json.loads(response["message"]["content"])
 
