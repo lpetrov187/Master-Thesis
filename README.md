@@ -25,15 +25,29 @@ ollama pull qwen2.5:7b-instruct
 ollama pull qwen2.5-coder:7b-instruct
 ```
 
+## Try it
+
+```bash
+python -m src.cli
+```
+
+Interactive REPL - type a question, see the agent's answer (which tool it
+picked, its groundedness score, whether it hedged or retried). Prefix a
+line with `baseline: ` to run that one query through the no-tool baseline
+instead, for a side-by-side comparison. `exit` or Ctrl+C to quit.
+
 ## Project layout
 
 ```
 src/
   agent/     # request analyzer, tool selector, orchestrator, synthesizer, verifier
   tools/     # doc RAG, code analysis, code execution tools
+  eval/      # eval task loading, runner, metrics, report generation
+  cli.py     # interactive demo entrypoint
 data/
   docs/      # source documents for the RAG corpus
   eval/      # evaluation task set + reference answers
 logs/        # trace logs from agent runs (jsonl)
+reports/     # generated eval tables/charts
 tests/       # unit tests for tools and agent components
 ```
