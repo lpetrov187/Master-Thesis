@@ -72,6 +72,46 @@ Log every step — the trace log is both your debugging tool and your evaluation
 - ~~**Known gap (Day 10 full run, 2026-08-12): Request Analyzer accuracy.**~~ **FIXED Day 12 (2026-08-13).** 8/24 eval tasks (33%) were misclassified as `needs_tool: False` when a tool was expected. Fix: `temperature=0.1` on the analyzer's call (the failures looked like sampling-driven inconsistency, not comprehension) plus 2 more targeted few-shot examples. Re-verified against the exact 8 failing queries before the full re-run: 7/8 fixed. The 8th (`doc_search_06`) was deliberately left as-is rather than chased with more eval-specific examples, to avoid overfitting the prompt to this one curated question. Full re-run: tool-selection accuracy 66.7% → 95.8%.
 - ~~**Known bug (Day 10 full run, 2026-08-12): Tool Selector double-escapes newlines in extracted `code` args.**~~ **FIXED Day 12 (2026-08-13).** Confirmed on 2/24 tasks (`code_analysis_04`, `programming_problem_08`), both with the identical "unexpected character after line continuation character" failure signature — the model's JSON output re-encoded a real newline as the two-character sequence `\n` instead of an actual escaped newline. Fix: `tool_registry.py`'s `code` arg schema changed from a single string to a JSON array of lines, sidestepping the escaping problem structurally instead of prompting around it; `tool_executor.py` joins the array back into a real string before dispatch. Re-verified against both exact failing tasks before the full re-run: both now return clean, uncorrupted code. Full re-run: agent hallucination rate 16.7% → 0% (hand-checked against Day 9's verified ground truth across all 24 answers, not assumed).
 
+### Known limitation: no train/dev/test separation - eval-set leakage in the Day 12 fix
+
+There is no held-out test set in this project. The 24-task eval set (Day 9) has
+been used for two purposes that should never share the same data: (1) diagnosing
+and fixing the pipeline, and (2) reporting the numbers that measure how well the
+fix worked. That's the same failure mode as training on your test set, even
+though no model weights were ever touched (Qwen2.5 is frozen throughout) - the
+leakage happened at the prompt-engineering level instead.
+
+Audited on 2026-08-13 after the Day 12 fix: **6 of the 7 few-shot examples in
+`request_analyzer.py` are near-verbatim or exact duplicates of actual eval task
+queries.** Three were already like this from Day 5 (`"How do I configure
+connection pooling in SQLAlchemy?"` is byte-identical to `doc_search_03`;
+`"How do I reuse a requests Session?"` and `"What is the recommended way to get
+a logger..."` are near/exact matches of `doc_search_01`/`doc_search_07`; the
+`sum(range(5))` example is a near-duplicate of `programming_problem_01`). Two
+more were added *during the Day 12 fix itself*, built directly from the
+specific eval tasks that were failing (`code_analysis_08`'s `"Is this code
+clean?\n\ndef greet(): return f'hi'"` and `programming_problem_02`'s
+`"What does this code output?\n\nfor i in range(3): print(i)"`) - i.e. the fix
+was partly built by looking at the test set and writing near-copies of it into
+the prompt.
+
+Consequence: the Day 12 numbers (tool-selection accuracy 66.7% → 95.8%, agent
+hallucination rate 16.7% → 0%) cannot be cited as a clean measurement of
+generalization. The model may be pattern-matching against a near-identical
+example sitting in its own prompt context rather than genuinely applying the
+classification rule more consistently. The improvement is real in the sense
+that it actually happened on this eval set, run for real against the real
+model - but it should not be presented as evidence the underlying fix
+generalizes beyond these specific 24 questions.
+
+Decision (2026-08-13): disclosed here rather than re-fixed, given time
+constraints. If evaluation rigor becomes a priority later, the correct fix is
+a genuine held-out test set - rewrite the leaked few-shot examples to use
+different libraries/functions/phrasing than anything in `tasks.json`, and
+write a second batch of eval tasks (~10-12) that were never referenced in any
+prompt or fix, reporting final numbers only from that held-out set while
+treating the original 24 as a dev set used for debugging.
+
 ## Verification / "done" criteria
 - Orchestration loop runs end-to-end on a real query, producing a trace log through all 5 stages.
 - Each of the 3 tools has at least one passing unit test.
