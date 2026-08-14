@@ -4,7 +4,9 @@ and retrieve the most relevant chunks for a query.
 Ingestion and retrieval share one embedding model instance (loaded lazily,
 since constructing a SentenceTransformer is slow) and one persistent Chroma
 collection on disk, so re-running ingest() picks up doc changes without
-restarting anything.
+restarting anything. Chunking is markdown-aware (src/tools/chunking.py) -
+each chunk carries its heading path and whether it's a code block, which
+matters once the corpus is real documentation instead of 4 short files.
 """
 from pathlib import Path
 
@@ -12,10 +14,17 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 
 from src.config import CHROMA_DIR, DOCS_DIR, EMBEDDING_MODEL
+from src.tools.chunking import chunk_markdown
 
 _COLLECTION_NAME = "docs"
-_CHUNK_WORDS = 120
-_CHUNK_OVERLAP_WORDS = 20
+
+# Cosine distance ranges roughly 0.0 (identical) to 2.0 (opposite); chunks
+# beyond this are treated as "nothing relevant" rather than force-returned
+# as evidence. Calibrated empirically against this corpus (see the
+# module's __main__ block): genuinely relevant hits landed at 0.22-0.54,
+# a deliberately irrelevant query landed at 0.93-0.97 - 0.75 sits cleanly
+# between the two clusters.
+_DEFAULT_MAX_DISTANCE = 0.75
 
 _embedder: SentenceTransformer | None = None
 
@@ -31,21 +40,16 @@ def _get_client() -> chromadb.ClientAPI:
     return chromadb.PersistentClient(path=str(CHROMA_DIR))
 
 
-def _chunk_text(text: str, chunk_words: int = _CHUNK_WORDS, overlap_words: int = _CHUNK_OVERLAP_WORDS) -> list[str]:
-    """Split `text` into overlapping word-count windows."""
-    words = text.split()
-    if not words:
-        return []
+def _reset_collection(client: chromadb.ClientAPI) -> chromadb.Collection:
+    """Recreate the collection from scratch, forcing cosine distance.
 
-    chunks = []
-    start = 0
-    while start < len(words):
-        end = start + chunk_words
-        chunks.append(" ".join(words[start:end]))
-        if end >= len(words):
-            break
-        start = end - overlap_words
-    return chunks
+    A collection's distance space is fixed at creation time - clearing its
+    contents isn't enough to change it, so this drops and recreates it.
+    """
+    existing_names = {c.name for c in client.list_collections()}
+    if _COLLECTION_NAME in existing_names:
+        client.delete_collection(_COLLECTION_NAME)
+    return client.create_collection(_COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
 
 
 def _load_docs() -> list[tuple[str, str]]:
@@ -54,24 +58,16 @@ def _load_docs() -> list[tuple[str, str]]:
 
 
 def ingest(client: chromadb.ClientAPI | None = None) -> int:
-    """Chunk, embed, and store every doc under DOCS_DIR. Returns chunk count.
-
-    Clears the collection first so re-running ingest reflects the current
-    contents of DOCS_DIR exactly, including removed docs/chunks.
-    """
+    """Chunk, embed, and store every doc under DOCS_DIR. Returns chunk count."""
     client = client or _get_client()
-    collection = client.get_or_create_collection(_COLLECTION_NAME)
-
-    existing_ids = collection.get()["ids"]
-    if existing_ids:
-        collection.delete(ids=existing_ids)
+    collection = _reset_collection(client)
 
     ids, documents, metadatas = [], [], []
     for source, text in _load_docs():
-        for i, chunk in enumerate(_chunk_text(text)):
+        for i, chunk in enumerate(chunk_markdown(text)):
             ids.append(f"{source}::{i}")
-            documents.append(chunk)
-            metadatas.append({"source": source, "chunk_index": i})
+            documents.append(chunk.text)
+            metadatas.append({"source": source, "chunk_index": i, "heading": chunk.heading, "is_code": chunk.is_code})
 
     if not documents:
         return 0
@@ -81,11 +77,17 @@ def ingest(client: chromadb.ClientAPI | None = None) -> int:
     return len(documents)
 
 
-def retrieve(query: str, top_k: int = 3, client: chromadb.ClientAPI | None = None) -> list[dict]:
-    """Return the `top_k` chunks most relevant to `query`.
+def retrieve(
+    query: str,
+    top_k: int = 3,
+    max_distance: float | None = _DEFAULT_MAX_DISTANCE,
+    client: chromadb.ClientAPI | None = None,
+) -> list[dict]:
+    """Return up to `top_k` chunks relevant to `query`, closest first.
 
-    Each result is {"text": str, "source": str, "distance": float}, sorted
-    by ascending distance (closest match first).
+    Each result is {"text", "source", "heading", "is_code", "distance"}.
+    Chunks farther than `max_distance` are dropped rather than force-
+    returned - pass None to disable the cutoff and always get `top_k`.
     """
     client = client or _get_client()
     collection = client.get_or_create_collection(_COLLECTION_NAME)
@@ -93,12 +95,20 @@ def retrieve(query: str, top_k: int = 3, client: chromadb.ClientAPI | None = Non
     query_embedding = _get_embedder().encode([query]).tolist()
     results = collection.query(query_embeddings=query_embedding, n_results=top_k)
 
-    return [
-        {"text": doc, "source": meta["source"], "distance": distance}
-        for doc, meta, distance in zip(
-            results["documents"][0], results["metadatas"][0], results["distances"][0]
-        )
+    hits = [
+        {
+            "text": doc,
+            "source": meta["source"],
+            "heading": meta.get("heading", ""),
+            "is_code": meta.get("is_code", False),
+            "distance": distance,
+        }
+        for doc, meta, distance in zip(results["documents"][0], results["metadatas"][0], results["distances"][0])
     ]
+
+    if max_distance is not None:
+        hits = [h for h in hits if h["distance"] <= max_distance]
+    return hits
 
 
 if __name__ == "__main__":
@@ -109,9 +119,10 @@ if __name__ == "__main__":
         "How do I configure connection pooling in SQLAlchemy?",
         "How do I reuse a requests Session?",
         "How do pytest fixture scopes work?",
+        "What's the airspeed velocity of an unladen swallow?",  # expect: nothing relevant
     ]
     for query in sample_queries:
         print(f"Query: {query}")
-        for hit in retrieve(query, top_k=2):
-            print(f"  [{hit['distance']:.3f}] {hit['source']}: {hit['text'][:80]}...")
+        for hit in retrieve(query, top_k=3, max_distance=None):  # no cutoff, to see raw distances
+            print(f"  [{hit['distance']:.3f}] {hit['source']} ({hit['heading']}): {hit['text'][:60]}...")
         print()

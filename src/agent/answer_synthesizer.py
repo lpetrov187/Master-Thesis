@@ -30,7 +30,9 @@ def _format_evidence(evidence: dict) -> str:
     """
     result = evidence["result"]
     if evidence["tool"] == "doc_rag":
-        return "\n\n".join(f"[source: {hit['source']}]\n{hit['text']}" for hit in result)
+        return "\n\n".join(
+            f"[source: {hit['source']}, section: {hit['heading'] or '(none)'}]\n{hit['text']}" for hit in result
+        )
     return str(result)
 
 
