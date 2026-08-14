@@ -20,11 +20,15 @@ _COLLECTION_NAME = "docs"
 
 # Cosine distance ranges roughly 0.0 (identical) to 2.0 (opposite); chunks
 # beyond this are treated as "nothing relevant" rather than force-returned
-# as evidence. Calibrated empirically against this corpus (see the
-# module's __main__ block): genuinely relevant hits landed at 0.22-0.54,
-# a deliberately irrelevant query landed at 0.93-0.97 - 0.75 sits cleanly
-# between the two clusters.
-_DEFAULT_MAX_DISTANCE = 0.75
+# as evidence. Recalibrated after the FastAPI corpus import (2026-08-15):
+# the original 0.75 was fit to a 4-doc corpus and turned out too loose at
+# real scale - a bigger, topically broader corpus has *some* chunk that's
+# moderately close to almost any query just from sheer size, so the
+# "irrelevant" floor shifts closer to 0 as the corpus grows. Re-measured
+# against the 85-file FastAPI corpus with 5 relevant + 5 irrelevant probe
+# queries: relevant top-hits landed at 0.24-0.34, irrelevant ones at
+# 0.72-0.80 - 0.5 sits centered in that gap with margin on both sides.
+_DEFAULT_MAX_DISTANCE = 0.5
 
 _embedder: SentenceTransformer | None = None
 
@@ -53,8 +57,16 @@ def _reset_collection(client: chromadb.ClientAPI) -> chromadb.Collection:
 
 
 def _load_docs() -> list[tuple[str, str]]:
-    """Return (filename, raw_text) for every doc under DOCS_DIR."""
-    return [(path.name, path.read_text(encoding="utf-8")) for path in sorted(Path(DOCS_DIR).glob("*.md"))]
+    """Return (relative_path, raw_text) for every doc under DOCS_DIR,
+    searched recursively so a real corpus can be organized into
+    subdirectories (e.g. data/docs/fastapi/tutorial/...). The relative
+    path (not just the bare filename) is used as the source id, since a
+    real multi-section corpus can have same-named files in different
+    subdirectories (e.g. multiple index.md)."""
+    return [
+        (str(path.relative_to(DOCS_DIR)), path.read_text(encoding="utf-8"))
+        for path in sorted(Path(DOCS_DIR).rglob("*.md"))
+    ]
 
 
 def ingest(client: chromadb.ClientAPI | None = None) -> int:
