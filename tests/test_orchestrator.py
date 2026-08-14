@@ -6,7 +6,21 @@ from unittest.mock import patch
 
 from src.agent.orchestrator import run
 from src.agent.tool_selector import ToolSelectionError
+from src.config import ENABLE_CLAIM_VERIFIER
 from src.tools.doc_rag import ingest
+
+
+def _assert_verification_ran_iff_enabled(trace: dict) -> None:
+    """The Claim Verifier is gated by config.ENABLE_CLAIM_VERIFIER (Day 12 -
+    it's the pipeline's biggest latency cost, disabled for faster iteration
+    without deleting the mechanism). Assert whichever behavior is currently
+    configured, so this test stays correct in both states."""
+    if ENABLE_CLAIM_VERIFIER:
+        assert trace["verification"] is not None
+        assert 0.0 <= trace["verification"]["groundedness_score"] <= 1.0
+    else:
+        assert trace["verification"] is None
+        assert trace["retried"] is False
 
 
 def test_tool_query_runs_end_to_end():
@@ -20,8 +34,7 @@ def test_tool_query_runs_end_to_end():
     assert trace["evidence"]["result"]
     assert trace["answer"]
 
-    assert trace["verification"] is not None
-    assert 0.0 <= trace["verification"]["groundedness_score"] <= 1.0
+    _assert_verification_ran_iff_enabled(trace)
     assert isinstance(trace["retried"], bool)
 
 
@@ -43,7 +56,7 @@ def test_code_analysis_query_dispatches_correct_tool():
     assert trace["selection"]["tool"] == "code_analysis"
     assert trace["evidence"]["result"]["syntax_valid"] is True
     assert trace["answer"]
-    assert trace["verification"] is not None
+    _assert_verification_ran_iff_enabled(trace)
 
 
 # --- hardening: control-flow only, no real model calls ---
