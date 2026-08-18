@@ -7,6 +7,7 @@ hedged rather than filled in from the model's own training knowledge.
 """
 import ollama
 
+from src.agent.history import format_history
 from src.config import OLLAMA_HOST, PRIMARY_MODEL
 
 _CONTROLLED_ACCESS_POLICY = (
@@ -36,19 +37,32 @@ def _format_evidence(evidence: dict) -> str:
     return str(result)
 
 
-def _build_prompt(query: str, evidence: dict | None) -> str:
+def _build_prompt(query: str, evidence: dict | None, history: list[dict] | None = None) -> str:
     if evidence is None:
-        return f"Answer the user's question directly and concisely.\n\nQuestion: {query}"
+        return (
+            f"{format_history(history)}"
+            f"Answer the user's question directly and concisely.\n\nQuestion: {query}"
+        )
 
     return (
         f"{_CONTROLLED_ACCESS_POLICY}\n\n"
+        f"{format_history(history)}"
         f"Question: {query}\n\n"
         f"Evidence from the '{evidence['tool']}' tool:\n{_format_evidence(evidence)}"
     )
 
 
-def synthesize(query: str, evidence: dict | None = None, client: ollama.Client | None = None) -> str:
+def synthesize(
+    query: str,
+    evidence: dict | None = None,
+    client: ollama.Client | None = None,
+    history: list[dict] | None = None,
+) -> str:
     """Draft a plain-text answer to `query`, informed by `evidence` if given.
+
+    `history` (optional) is prior {"query", "answer"} turns from the same
+    conversation, so the answer reads as a natural continuation instead of
+    a cold restart (resolving "it"/"that", not re-explaining context).
 
     If the tool that produced `evidence` failed, report that directly
     instead of calling the model on evidence that isn't actually there -
@@ -61,6 +75,6 @@ def synthesize(query: str, evidence: dict | None = None, client: ollama.Client |
     client = client or ollama.Client(host=OLLAMA_HOST)
     response = client.chat(
         model=PRIMARY_MODEL,
-        messages=[{"role": "user", "content": _build_prompt(query, evidence)}],
+        messages=[{"role": "user", "content": _build_prompt(query, evidence, history)}],
     )
     return response["message"]["content"]

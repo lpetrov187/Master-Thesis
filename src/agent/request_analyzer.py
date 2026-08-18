@@ -5,6 +5,7 @@ import json
 
 import ollama
 
+from src.agent.history import format_history
 from src.config import OLLAMA_HOST, PRIMARY_MODEL
 
 _ANALYSIS_SCHEMA = {
@@ -17,7 +18,7 @@ _ANALYSIS_SCHEMA = {
 }
 
 
-def _build_prompt(query: str) -> str:
+def _build_prompt(query: str, history: list[dict] | None = None) -> str:
     return (
         "You are the request-analysis component of an agent system. Decide "
         "whether answering the user's request requires using an external "
@@ -36,7 +37,11 @@ def _build_prompt(query: str) -> str:
         '- "Run this and tell me what it prints:\\n\\nprint(sum(range(5)))" '
         "(contains a code snippet to execute)\n"
         '- "What does this code output?\\n\\nfor i in range(3):\\n    print(i)" '
-        "(contains a code snippet to execute)\n\n"
+        "(contains a code snippet to execute)\n"
+        '- "can you tell me the how does one configure timeouts in httpx" '
+        "(redundant, ungrammatical phrasing - but still names a specific "
+        "library and asks how to configure something, so it needs a "
+        "documentation lookup just the same)\n\n"
         "Examples that do NOT need a tool:\n"
         '- "What\'s a friendly way to greet someone in an email?" (general knowledge)\n'
         '- "What is a for loop?" (general knowledge, no specific doc/code to check)\n\n'
@@ -45,17 +50,27 @@ def _build_prompt(query: str) -> str:
         "exceptions. If it names a specific library/API and asks how to use "
         "or configure it, it needs a tool. A tool is NOT needed only for "
         "greetings, opinions, or generic explanations with no specific "
-        "library, API, or code attached.\n\n"
-        f"User request:\n{query}"
+        "library, API, or code attached. Judge the request's underlying "
+        "intent only - ignore grammar, typos, redundant words, or awkward "
+        "phrasing; a badly-worded request about a specific library still "
+        "needs a tool just as much as a cleanly-worded one.\n\n"
+        f"{format_history(history)}"
+        f"Current user request:\n{query}"
     )
 
 
-def analyze_request(query: str, client: ollama.Client | None = None) -> dict:
-    """Return {"needs_tool": bool, "reasoning": str} for `query`."""
+def analyze_request(query: str, client: ollama.Client | None = None, history: list[dict] | None = None) -> dict:
+    """Return {"needs_tool": bool, "reasoning": str} for `query`.
+
+    `history` (optional) is a list of prior {"query", "answer"} turns from
+    the same conversation, so a follow-up like "and what about httpx
+    instead?" still classifies correctly even though the current message
+    alone doesn't name a tool-worthy topic.
+    """
     client = client or ollama.Client(host=OLLAMA_HOST)
     response = client.chat(
         model=PRIMARY_MODEL,
-        messages=[{"role": "user", "content": _build_prompt(query)}],
+        messages=[{"role": "user", "content": _build_prompt(query, history)}],
         format=_ANALYSIS_SCHEMA,
         options={"temperature": 0.1},
     )

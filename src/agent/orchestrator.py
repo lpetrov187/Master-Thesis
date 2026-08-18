@@ -36,7 +36,9 @@ def _timed(fn, *args, **kwargs):
     return result, time.perf_counter() - start
 
 
-def _select_and_execute(query: str, client: ollama.Client) -> tuple[dict | None, dict | None, str | None, dict]:
+def _select_and_execute(
+    query: str, client: ollama.Client, history: list[dict] | None = None
+) -> tuple[dict | None, dict | None, str | None, dict]:
     """Select a tool and run it. Returns (selection, evidence, error, timings).
 
     `error` is set (selection and evidence stay None) if the model's tool
@@ -45,7 +47,7 @@ def _select_and_execute(query: str, client: ollama.Client) -> tuple[dict | None,
     """
     start = time.perf_counter()
     try:
-        selection = select_tool(query, client=client)
+        selection = select_tool(query, client=client, history=history)
     except ToolSelectionError as exc:
         error = f"tool selection failed, falling back to a no-tool answer: {exc}"
         return None, None, error, {"selection": time.perf_counter() - start}
@@ -55,8 +57,16 @@ def _select_and_execute(query: str, client: ollama.Client) -> tuple[dict | None,
     return selection, evidence, None, {"selection": selection_time, "execution": execution_time}
 
 
-def run(query: str, client: ollama.Client | None = None) -> dict:
+def run(query: str, client: ollama.Client | None = None, history: list[dict] | None = None) -> dict:
     """Run the full pipeline for `query`.
+
+    `history` (optional) is a list of prior {"query", "answer"} turns from
+    the same conversation - see src/agent/session.py, which is what
+    actually accumulates it across calls; this function itself stays a
+    pure, stateless call each time. Threaded into the Request Analyzer,
+    Tool Selector, and Answer Synthesizer; the Claim Verifier does not
+    receive it, since it only checks the current answer against current
+    evidence and has no conversational judgment to make.
 
     Returns a trace dict: query, analysis, selection, evidence, answer,
     verification, retried, error, timings. `error` is None on a clean run;
@@ -79,14 +89,16 @@ def run(query: str, client: ollama.Client | None = None) -> dict:
     run_start = time.perf_counter()
 
     try:
-        trace["analysis"], timings["analysis"] = _timed(analyze_request, query, client=client)
+        trace["analysis"], timings["analysis"] = _timed(analyze_request, query, client=client, history=history)
 
         if trace["analysis"]["needs_tool"]:
-            selection, evidence, selection_error, select_timings = _select_and_execute(query, client)
+            selection, evidence, selection_error, select_timings = _select_and_execute(query, client, history)
             trace["selection"], trace["evidence"], trace["error"] = selection, evidence, selection_error
             timings.update(select_timings)
 
-        trace["answer"], timings["synthesis"] = _timed(synthesize, query, trace["evidence"], client=client)
+        trace["answer"], timings["synthesis"] = _timed(
+            synthesize, query, trace["evidence"], client=client, history=history
+        )
 
         has_usable_evidence = trace["evidence"] is not None and not trace["evidence"].get("error")
         if has_usable_evidence and ENABLE_CLAIM_VERIFIER:
@@ -95,13 +107,15 @@ def run(query: str, client: ollama.Client | None = None) -> dict:
             )
 
             if trace["verification"]["groundedness_score"] < _GROUNDEDNESS_RETRY_THRESHOLD:
-                selection, evidence, selection_error, retry_timings = _select_and_execute(query, client)
+                selection, evidence, selection_error, retry_timings = _select_and_execute(query, client, history)
                 timings["retry_selection"] = retry_timings.get("selection")
                 timings["retry_execution"] = retry_timings.get("execution")
 
                 if selection_error is None:
                     trace["selection"], trace["evidence"] = selection, evidence
-                    trace["answer"], timings["retry_synthesis"] = _timed(synthesize, query, evidence, client=client)
+                    trace["answer"], timings["retry_synthesis"] = _timed(
+                        synthesize, query, evidence, client=client, history=history
+                    )
                     trace["verification"], timings["retry_verification"] = _timed(
                         verify, trace["answer"], evidence, client=client
                     )

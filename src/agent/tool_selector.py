@@ -14,6 +14,7 @@ import json
 import ollama
 from jsonschema import ValidationError, validate
 
+from src.agent.history import format_history
 from src.agent.tool_registry import TOOL_REGISTRY
 from src.config import OLLAMA_HOST, PRIMARY_MODEL
 
@@ -32,7 +33,7 @@ class ToolSelectionError(Exception):
     """Raised when the LLM's tool/args choice fails validation."""
 
 
-def _build_prompt(query: str) -> str:
+def _build_prompt(query: str, history: list[dict] | None = None) -> str:
     tool_lines = "\n".join(
         f"- {spec.name}: {spec.description} Args schema: {json.dumps(spec.parameters)}"
         for spec in TOOL_REGISTRY.values()
@@ -42,12 +43,17 @@ def _build_prompt(query: str) -> str:
         "user request below, choose exactly one tool from the list and "
         "produce arguments that satisfy its JSON schema.\n\n"
         f"Available tools:\n{tool_lines}\n\n"
-        f"User request:\n{query}"
+        f"{format_history(history)}"
+        f"Current user request:\n{query}"
     )
 
 
-def select_tool(query: str, client: ollama.Client | None = None) -> dict:
+def select_tool(query: str, client: ollama.Client | None = None, history: list[dict] | None = None) -> dict:
     """Select a tool + args for `query`. Returns {"tool", "args", "reasoning"}.
+
+    `history` (optional) is prior {"query", "answer"} turns from the same
+    conversation - e.g. so "run it with different input" can pull the code
+    it refers to from an earlier turn rather than the current message.
 
     Raises ToolSelectionError if the model picks an unknown tool or produces
     args that don't validate against that tool's parameter schema.
@@ -55,7 +61,7 @@ def select_tool(query: str, client: ollama.Client | None = None) -> dict:
     client = client or ollama.Client(host=OLLAMA_HOST)
     response = client.chat(
         model=PRIMARY_MODEL,
-        messages=[{"role": "user", "content": _build_prompt(query)}],
+        messages=[{"role": "user", "content": _build_prompt(query, history)}],
         format=_SELECTION_SCHEMA,
         options={"temperature": 0.1},
     )

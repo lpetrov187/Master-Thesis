@@ -4,12 +4,15 @@ see the agent's answer, without writing any Python.
 Usage:
     python -m src.cli
 
-Type a question and press Enter. Prefix a line with "baseline: " to run
-that one query through the no-tool baseline instead of the agent, for a
-side-by-side comparison. Type "exit" or press Ctrl+C to quit.
+Type a question and press Enter. The agent remembers recent turns in this
+session, so follow-ups can reference earlier questions/answers. Prefix a
+line with "baseline: " to run that one query through the no-tool baseline
+instead - deliberately excluded from history, since it's meant to stay the
+clean, memory-free control condition used throughout the eval work. Type
+"exit" or press Ctrl+C to quit.
 """
 from src.agent.baseline import run as run_baseline
-from src.agent.orchestrator import run as run_agent
+from src.agent.session import Session
 from src.tools.doc_rag import ingest
 
 
@@ -46,6 +49,7 @@ def _print_baseline_result(trace: dict) -> None:
 def main() -> None:
     print("Loading documentation corpus...")
     ingest()
+    session = Session()
 
     print("Agent CLI - type a question, or 'exit' to quit.")
     print("Prefix a line with 'baseline: ' to run it through the no-tool baseline instead.\n")
@@ -67,7 +71,7 @@ def main() -> None:
             trace = run_baseline(query.split(":", 1)[1].strip())
             _print_baseline_result(trace)
         else:
-            trace = run_agent(query)
+            trace = session.ask(query)
             _print_agent_result(trace)
         print()
 
