@@ -185,18 +185,40 @@ def retrieve(
     return hits
 
 
+def _print_ranked(hits: list[dict], label: str) -> None:
+    print(f"--- {label} ---")
+    if not hits:
+        print("  (none)")
+    for i, hit in enumerate(hits, 1):
+        tag = "expanded" if hit.get("expanded") else "ranked  "
+        code_tag = " [code]" if hit["is_code"] else ""
+        print(f"{i:2}. [{tag}] [{hit['distance']:.3f}] {hit['source']} | {hit['heading']!r}{code_tag}")
+        print(f"     {hit['text'][:100]!r}")
+
+
 if __name__ == "__main__":
     count = ingest()
     print(f"Ingested {count} chunks from {DOCS_DIR}\n")
+    print("Type a query to inspect its chunk ranking, or 'exit' to quit.")
+    print("(Embedding-only - no LLM calls, this is just the retrieval step.)\n")
 
-    sample_queries = [
-        "How do I configure connection pooling in SQLAlchemy?",
-        "How do I reuse a requests Session?",
-        "How do pytest fixture scopes work?",
-        "What's the airspeed velocity of an unladen swallow?",  # expect: nothing relevant
-    ]
-    for query in sample_queries:
-        print(f"Query: {query}")
-        for hit in retrieve(query, top_k=3, max_distance=None):  # no cutoff, to see raw distances
-            print(f"  [{hit['distance']:.3f}] {hit['source']} ({hit['heading']}): {hit['text'][:60]}...")
+    while True:
+        try:
+            query = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting.")
+            break
+
+        if not query:
+            continue
+        if query.lower() in ("exit", "quit"):
+            break
+
+        print()
+        raw_hits = retrieve(query, top_k=15, max_distance=None, expand_same_section=False)
+        _print_ranked(raw_hits, "raw ranking: top 15 by distance, no cutoff, no expansion")
+
+        print()
+        final_hits = retrieve(query)  # actual pipeline defaults: top_k=5, max_distance=0.5, expansion on
+        _print_ranked(final_hits, "what the pipeline actually uses (defaults applied)")
         print()
