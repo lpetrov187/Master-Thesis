@@ -89,3 +89,61 @@ def test_short_paragraphs_under_same_heading_get_merged():
     assert len(chunks) == 1
     assert "First short line." in chunks[0].text
     assert "Third short line." in chunks[0].text
+
+
+_NESTED_DOC = """# Dependencies
+
+## First Steps
+
+Intro sentence explaining how the system works overall.
+
+### Create a dependency
+
+Explanation of creating a dependency.
+
+### Declare the dependency
+
+Explanation of declaring the dependency, the actual mechanism detail.
+
+## Other Section
+
+Unrelated content that should not be pulled in.
+"""
+
+
+def test_subsections_below_boundary_level_merge_into_the_parent_chunk():
+    chunks = chunk_markdown(_NESTED_DOC, chunk_words=200, overlap_words=10)
+
+    first_steps_chunks = [c for c in chunks if c.heading == "Dependencies > First Steps"]
+    assert len(first_steps_chunks) == 1
+    text = first_steps_chunks[0].text
+    assert "Intro sentence explaining how the system works overall." in text
+    assert "Explanation of creating a dependency." in text
+    assert "Explanation of declaring the dependency" in text
+
+
+def test_subheading_lines_stay_visible_inline_in_the_merged_text():
+    chunks = chunk_markdown(_NESTED_DOC, chunk_words=200, overlap_words=10)
+
+    first_steps_chunks = [c for c in chunks if c.heading == "Dependencies > First Steps"]
+    text = first_steps_chunks[0].text
+    assert "### Create a dependency" in text
+    assert "### Declare the dependency" in text
+
+
+def test_sections_at_or_above_boundary_level_still_split():
+    chunks = chunk_markdown(_NESTED_DOC, chunk_words=200, overlap_words=10)
+
+    other_chunks = [c for c in chunks if c.heading == "Dependencies > Other Section"]
+    assert len(other_chunks) == 1
+    assert "Unrelated content" in other_chunks[0].text
+    assert "Explanation of declaring the dependency" not in other_chunks[0].text
+
+
+def test_boundary_level_is_configurable():
+    # boundary_level=3 should keep ### headings as their own hard split too
+    chunks = chunk_markdown(_NESTED_DOC, chunk_words=200, overlap_words=10, boundary_level=3)
+
+    headings = {c.heading for c in chunks}
+    assert "Dependencies > First Steps > Create a dependency" in headings
+    assert "Dependencies > First Steps > Declare the dependency" in headings

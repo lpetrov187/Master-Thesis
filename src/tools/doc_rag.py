@@ -89,17 +89,71 @@ def ingest(client: chromadb.ClientAPI | None = None) -> int:
     return len(documents)
 
 
+def _expand_with_siblings(
+    hits: list[dict], collection: chromadb.Collection, max_total: int
+) -> list[dict]:
+    """For each hit, pull in other chunks sharing the same (source, heading).
+
+    A section that genuinely matched is often still split into several
+    chunks - not just by size, but because code fences force a chunk
+    boundary regardless of heading level (so a section that interleaves
+    prose and code, like a tutorial building up one example step by step,
+    ends up fragmented across several pieces even under one heading). One
+    piece ranking well is evidence the whole section is relevant; this
+    pulls in the rest of it rather than handing the synthesizer an
+    arbitrary fragment. Bounded by `max_total` so one big matching section
+    can't blow up evidence size unboundedly.
+    """
+    expanded = list(hits)
+    seen_ids = {h["id"] for h in hits}
+
+    for hit in hits:
+        if len(expanded) >= max_total:
+            break
+
+        siblings = collection.get(
+            where={"$and": [{"source": {"$eq": hit["source"]}}, {"heading": {"$eq": hit["heading"]}}]}
+        )
+        for sibling_id, doc, meta in zip(siblings["ids"], siblings["documents"], siblings["metadatas"]):
+            if len(expanded) >= max_total:
+                break
+            if sibling_id in seen_ids:
+                continue
+            seen_ids.add(sibling_id)
+            expanded.append(
+                {
+                    "id": sibling_id,
+                    "text": doc,
+                    "source": meta["source"],
+                    "heading": meta.get("heading", ""),
+                    "is_code": meta.get("is_code", False),
+                    "distance": hit["distance"],  # not independently ranked - inherits the triggering hit's
+                    "expanded": True,
+                }
+            )
+
+    return expanded
+
+
 def retrieve(
     query: str,
-    top_k: int = 3,
+    top_k: int = 5,
     max_distance: float | None = _DEFAULT_MAX_DISTANCE,
+    expand_same_section: bool = True,
+    max_total: int = 8,
     client: chromadb.ClientAPI | None = None,
 ) -> list[dict]:
-    """Return up to `top_k` chunks relevant to `query`, closest first.
+    """Return chunks relevant to `query`, closest-ranked first.
 
-    Each result is {"text", "source", "heading", "is_code", "distance"}.
-    Chunks farther than `max_distance` are dropped rather than force-
-    returned - pass None to disable the cutoff and always get `top_k`.
+    Each result is {"id", "text", "source", "heading", "is_code",
+    "distance", "expanded"}. Chunks farther than `max_distance` are
+    dropped rather than force-returned - pass None to disable the cutoff.
+
+    When `expand_same_section` is True (default), each of the `top_k`
+    ranked hits also pulls in sibling chunks from the same (source,
+    heading) that weren't independently ranked - see
+    `_expand_with_siblings`. Total results are capped at `max_total`
+    regardless of how many siblings that finds.
     """
     client = client or _get_client()
     collection = client.get_or_create_collection(_COLLECTION_NAME)
@@ -109,17 +163,25 @@ def retrieve(
 
     hits = [
         {
+            "id": chunk_id,
             "text": doc,
             "source": meta["source"],
             "heading": meta.get("heading", ""),
             "is_code": meta.get("is_code", False),
             "distance": distance,
+            "expanded": False,
         }
-        for doc, meta, distance in zip(results["documents"][0], results["metadatas"][0], results["distances"][0])
+        for chunk_id, doc, meta, distance in zip(
+            results["ids"][0], results["documents"][0], results["metadatas"][0], results["distances"][0]
+        )
     ]
 
     if max_distance is not None:
         hits = [h for h in hits if h["distance"] <= max_distance]
+
+    if expand_same_section and hits:
+        hits = _expand_with_siblings(hits, collection, max_total)
+
     return hits
 
 

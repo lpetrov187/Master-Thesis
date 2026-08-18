@@ -13,6 +13,13 @@ from src.agent.orchestrator import run as run_agent
 from src.tools.doc_rag import ingest
 
 
+def _print_timings(timings: dict) -> None:
+    print("[timings]")
+    for stage, secs in timings.items():
+        if secs is not None:
+            print(f"  {stage:18} {secs:6.2f}s")
+
+
 def _print_agent_result(trace: dict) -> None:
     tool = trace["selection"]["tool"] if trace["selection"] else "none"
     verification = trace["verification"]
@@ -27,6 +34,8 @@ def _print_agent_result(trace: dict) -> None:
 
     print(f"\n[{status}]")
     print(trace["answer"])
+    print()
+    _print_timings(trace["timings"])
 
 
 def _print_baseline_result(trace: dict) -> None:

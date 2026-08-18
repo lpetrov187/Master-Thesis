@@ -15,8 +15,20 @@ from dataclasses import dataclass
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 _FENCE_RE = re.compile(r"^```")
 
-_CHUNK_WORDS = 150
+_CHUNK_WORDS = 300
 _CHUNK_OVERLAP_WORDS = 20
+
+# Headings at or above this level (## and shallower, by default) are hard
+# chunk boundaries; deeper headings (### and beyond) stay inline as visible
+# text within their parent's chunk instead of forcing their own. Found by
+# a real retrieval failure: a page's actual answer lived in a ### child
+# 3 levels deep (Dependencies > First Steps > Declare the dependency),
+# split away from the parent section whose intro phrase ("how the
+# Dependency Injection system works") was what made the section rank for
+# a "how does X work" query in the first place. Splitting every heading
+# level fragments a single coherent explanation into pieces that don't
+# individually look relevant, even though the whole is.
+_HEADING_BOUNDARY_LEVEL = 2
 
 
 @dataclass(frozen=True)
@@ -26,9 +38,15 @@ class Chunk:
     is_code: bool
 
 
-def _split_into_blocks(text: str) -> list[Chunk]:
+def _split_into_blocks(text: str, boundary_level: int = _HEADING_BOUNDARY_LEVEL) -> list[Chunk]:
     """Split markdown into blocks - one per paragraph or code fence - each
-    tagged with the heading path active at that point in the document."""
+    tagged with the heading path active at that point in the document.
+
+    Only headings at or above `boundary_level` start a new block and update
+    the tracked heading path; deeper headings are left as plain text inside
+    the current block, so a section's subsections stay together instead of
+    each becoming their own disconnected fragment.
+    """
     heading_stack: list[tuple[int, str]] = []
     blocks: list[Chunk] = []
     current_lines: list[str] = []
@@ -61,8 +79,11 @@ def _split_into_blocks(text: str) -> list[Chunk]:
 
         heading_match = _HEADING_RE.match(line)
         if heading_match:
-            flush_text()
             level = len(heading_match.group(1))
+            if level > boundary_level:
+                current_lines.append(line)  # deeper heading: keep inline, don't split or retag
+                continue
+            flush_text()
             heading_stack = [h for h in heading_stack if h[0] < level]
             heading_stack.append((level, heading_match.group(2).strip()))
             continue
@@ -91,17 +112,22 @@ def _window_words(text: str, chunk_words: int, overlap_words: int) -> list[str]:
 
 
 def chunk_markdown(
-    text: str, chunk_words: int = _CHUNK_WORDS, overlap_words: int = _CHUNK_OVERLAP_WORDS
+    text: str,
+    chunk_words: int = _CHUNK_WORDS,
+    overlap_words: int = _CHUNK_OVERLAP_WORDS,
+    boundary_level: int = _HEADING_BOUNDARY_LEVEL,
 ) -> list[Chunk]:
     """Chunk `text` respecting heading and code-fence boundaries.
 
     Code blocks are kept atomic (never split) unless larger than
     `chunk_words`, in which case they're windowed like prose but stay
     tagged `is_code=True`. Consecutive prose blocks under the same heading
-    are merged up to `chunk_words` before windowing, so short paragraphs
-    don't each become their own tiny, context-free chunk.
+    (heading level <= `boundary_level`; deeper headings stay inline within
+    their parent's chunk) are merged up to `chunk_words` before windowing,
+    so short paragraphs - or whole subsections - don't each become their
+    own tiny, context-free chunk.
     """
-    blocks = _split_into_blocks(text)
+    blocks = _split_into_blocks(text, boundary_level)
     chunks: list[Chunk] = []
     buffer_text = ""
     buffer_heading = ""
