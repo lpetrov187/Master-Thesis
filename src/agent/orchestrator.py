@@ -20,6 +20,7 @@ import ollama
 
 from src.agent.answer_synthesizer import synthesize
 from src.agent.claim_verifier import hedge_unsupported_claims, verify
+from src.agent.code_generation import generate_and_verify_code
 from src.agent.request_analyzer import analyze_request
 from src.agent.tool_executor import execute_tool
 from src.agent.tool_selector import ToolSelectionError, select_tool
@@ -68,6 +69,16 @@ def run(query: str, client: ollama.Client | None = None, history: list[dict] | N
     receive it, since it only checks the current answer against current
     evidence and has no conversational judgment to make.
 
+    The Request Analyzer's `action` picks one of three branches:
+    "lookup_or_inspect" runs the existing Tool Selector -> Tool Executor
+    path; "generate" runs generate_and_verify_code() instead, which does
+    its own bounded generate/verify/revise cycle and packages the result
+    into the same evidence shape a normal tool run would produce, so
+    synthesize() needs no special-casing; "none" skips straight to
+    synthesize() with no evidence. The Claim Verifier is skipped for
+    "generate", since the evidence it would check already went through its
+    own verify/revise cycle.
+
     Returns a trace dict: query, analysis, selection, evidence, answer,
     verification, retried, error, timings. `error` is None on a clean run;
     it's set (with a best-effort partial trace) if the model was
@@ -90,18 +101,29 @@ def run(query: str, client: ollama.Client | None = None, history: list[dict] | N
 
     try:
         trace["analysis"], timings["analysis"] = _timed(analyze_request, query, client=client, history=history)
+        action = trace["analysis"]["action"]
 
-        if trace["analysis"]["needs_tool"]:
+        if action == "lookup_or_inspect":
             selection, evidence, selection_error, select_timings = _select_and_execute(query, client, history)
             trace["selection"], trace["evidence"], trace["error"] = selection, evidence, selection_error
             timings.update(select_timings)
+        elif action == "generate":
+            trace["selection"] = {
+                "tool": "generate_and_verify_code",
+                "args": {"task": query},
+                "reasoning": trace["analysis"]["reasoning"],
+            }
+            trace["evidence"], gen_timings, trace["retried"] = generate_and_verify_code(
+                query, client=client, history=history
+            )
+            timings.update(gen_timings)
 
         trace["answer"], timings["synthesis"] = _timed(
             synthesize, query, trace["evidence"], client=client, history=history
         )
 
         has_usable_evidence = trace["evidence"] is not None and not trace["evidence"].get("error")
-        if has_usable_evidence and ENABLE_CLAIM_VERIFIER:
+        if has_usable_evidence and ENABLE_CLAIM_VERIFIER and action != "generate":
             trace["verification"], timings["verification"] = _timed(
                 verify, trace["answer"], trace["evidence"], client=client
             )

@@ -1,5 +1,6 @@
-"""Request Analyzer: decides whether the query needs a tool at all, before
-the Tool Selector decides *which* one.
+"""Request Analyzer: decides what kind of action the query needs, before
+the rest of the pipeline acts on it - a documentation/code lookup, code to
+be generated from scratch, or no tool at all.
 """
 import json
 
@@ -11,56 +12,71 @@ from src.config import OLLAMA_HOST, PRIMARY_MODEL
 _ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
-        "needs_tool": {"type": "boolean"},
+        "action": {"type": "string", "enum": ["none", "lookup_or_inspect", "generate"]},
         "reasoning": {"type": "string"},
     },
-    "required": ["needs_tool", "reasoning"],
+    "required": ["action", "reasoning"],
 }
 
 
 def _build_prompt(query: str, history: list[dict] | None = None) -> str:
     return (
-        "You are the request-analysis component of an agent system. Decide "
-        "whether answering the user's request requires using an external "
-        "tool: searching stored documentation, statically analyzing a code "
-        "snippet, or running code.\n\n"
-        "Examples that NEED a tool:\n"
+        "You are the request-analysis component of an agent system. "
+        "Classify the user's request into exactly one action:\n\n"
+        '- "lookup_or_inspect": the request needs a documentation lookup '
+        "(names a specific library/API and asks how to use or configure "
+        "it), OR the request already contains a code snippet to statically "
+        "analyze or run.\n"
+        '- "generate": the request describes a coding task to *implement* '
+        "from scratch - no existing code is given, and no specific "
+        "library/API is being looked up. The agent should write new code "
+        "to solve it.\n"
+        '- "none": general knowledge, greetings, opinions, or explanations '
+        "with no specific library, API, or code attached.\n\n"
+        'Examples of "lookup_or_inspect":\n'
         '- "How do I configure connection pooling in SQLAlchemy?" '
-        "(needs a documentation lookup, not a guess)\n"
-        '- "How do I reuse a requests Session?" (needs a documentation lookup)\n'
+        "(documentation lookup)\n"
+        '- "How do I reuse a requests Session?" (documentation lookup)\n'
         '- "What is the recommended way to get a logger in a Python module?" '
-        "(asks about a specific library's recommended usage - needs a documentation lookup)\n"
+        "(asks about a specific library's recommended usage - documentation lookup)\n"
         '- "Can you review this function for style issues?\\n\\ndef add(a,b): return a+b" '
-        "(contains a code snippet to analyze)\n"
+        "(code snippet given, to analyze)\n"
         '- "Is this code clean?\\n\\ndef greet():\\n    return f\'hi\'" '
-        "(contains a code snippet to analyze, even though the question is short)\n"
+        "(code snippet given, even though the question is short)\n"
         '- "Run this and tell me what it prints:\\n\\nprint(sum(range(5)))" '
-        "(contains a code snippet to execute)\n"
+        "(code snippet given, to execute)\n"
         '- "What does this code output?\\n\\nfor i in range(3):\\n    print(i)" '
-        "(contains a code snippet to execute)\n"
+        "(code snippet given, to execute)\n"
         '- "can you tell me the how does one configure timeouts in httpx" '
         "(redundant, ungrammatical phrasing - but still names a specific "
-        "library and asks how to configure something, so it needs a "
-        "documentation lookup just the same)\n\n"
-        "Examples that do NOT need a tool:\n"
+        "library and asks how to configure something, so it's still a "
+        "documentation lookup)\n\n"
+        'Examples of "generate":\n'
+        '- "Write a function that sorts a list of integers." '
+        "(task to implement, no existing code, no library named)\n"
+        '- "Sort this array: [5, 2, 8, 1]" '
+        "(task to implement - describes desired behavior, not existing code to inspect)\n"
+        '- "Can you write me a script that counts how many vowels are in a string?" '
+        "(task to implement)\n\n"
+        'Examples of "none":\n'
         '- "What\'s a friendly way to greet someone in an email?" (general knowledge)\n'
         '- "What is a for loop?" (general knowledge, no specific doc/code to check)\n\n'
-        "Rule of thumb: if the request contains an actual code snippet (even "
-        "a one-line one, even without a code block), it needs a tool - no "
-        "exceptions. If it names a specific library/API and asks how to use "
-        "or configure it, it needs a tool. A tool is NOT needed only for "
-        "greetings, opinions, or generic explanations with no specific "
-        "library, API, or code attached. Judge the request's underlying "
-        "intent only - ignore grammar, typos, redundant words, or awkward "
-        "phrasing; a badly-worded request about a specific library still "
-        "needs a tool just as much as a cleanly-worded one.\n\n"
+        "Rule of thumb: if the request contains an actual code snippet "
+        "(even a one-line one, even without a code block), it's "
+        '"lookup_or_inspect" - no exceptions. If it names a specific '
+        "library/API and asks how to use or configure it, it's also "
+        '"lookup_or_inspect". If it instead describes a task to build with '
+        'no code and no library named, it\'s "generate". Judge the '
+        "request's underlying intent only - ignore grammar, typos, "
+        "redundant words, or awkward phrasing; a badly-worded request "
+        "still gets classified the same as a cleanly-worded one.\n\n"
         f"{format_history(history)}"
         f"Current user request:\n{query}"
     )
 
 
 def analyze_request(query: str, client: ollama.Client | None = None, history: list[dict] | None = None) -> dict:
-    """Return {"needs_tool": bool, "reasoning": str} for `query`.
+    """Return {"action": "none" | "lookup_or_inspect" | "generate", "reasoning": str} for `query`.
 
     `history` (optional) is a list of prior {"query", "answer"} turns from
     the same conversation, so a follow-up like "and what about httpx
