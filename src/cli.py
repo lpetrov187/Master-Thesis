@@ -23,6 +23,23 @@ def _print_timings(timings: dict) -> None:
             print(f"  {stage:18} {secs:6.2f}s")
 
 
+def _print_generation_details(evidence: dict) -> None:
+    """Show whether the code-generation loop actually did anything: how
+    many passes it took, and - if a revision fired - why, so it's clear
+    the agent isn't just reporting the first draft as-is."""
+    result = evidence.get("result")
+    if not result:
+        return
+
+    print(f"[code generation] iterations: {result['iterations']}")
+    if result["revised"]:
+        print(f"  first attempt failed verification ({result['revision_reason']}) -> revised and re-verified")
+    elif result["revision_reason"] is not None:
+        print(f"  revision attempted but couldn't be applied ({result['revision_reason']})")
+    else:
+        print("  passed verification on the first attempt, no revision needed")
+
+
 def _print_agent_result(trace: dict) -> None:
     tool = trace["selection"]["tool"] if trace["selection"] else "none"
     verification = trace["verification"]
@@ -36,6 +53,8 @@ def _print_agent_result(trace: dict) -> None:
         status += f" | ERROR: {trace['error']}"
 
     print(f"\n[{status}]")
+    if tool == "generate_and_verify_code" and trace["evidence"]:
+        _print_generation_details(trace["evidence"])
     print(trace["answer"])
     print()
     _print_timings(trace["timings"])

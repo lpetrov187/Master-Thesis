@@ -62,6 +62,33 @@ def needs_revision(analysis_evidence: dict, execution_evidence: dict) -> bool:
     return bool(execution_result["timed_out"] or execution_result["exit_code"] != 0)
 
 
+def _describe_problem(analysis_evidence: dict, execution_evidence: dict) -> str | None:
+    """Human-readable explanation of whatever needs_revision() flagged -
+    used so the CLI/evidence can say *why* a revision fired, not just that
+    one did. Mirrors needs_revision()'s own checks; returns None if it
+    would return False."""
+    if analysis_evidence.get("error"):
+        return f"code_analysis tool failed: {analysis_evidence['error']}"
+    if execution_evidence.get("error"):
+        return f"code_execution tool failed: {execution_evidence['error']}"
+
+    problems = []
+    analysis_result = analysis_evidence["result"]
+    if not analysis_result["syntax_valid"]:
+        message = analysis_result["findings"][0]["message"] if analysis_result["findings"] else "invalid syntax"
+        problems.append(f"syntax error: {message}")
+    elif analysis_result["findings"]:
+        problems.append(f"{len(analysis_result['findings'])} lint finding(s)")
+
+    execution_result = execution_evidence["result"]
+    if execution_result["timed_out"]:
+        problems.append("execution timed out")
+    elif execution_result["exit_code"] != 0:
+        problems.append(f"execution exited with code {execution_result['exit_code']}")
+
+    return "; ".join(problems) if problems else None
+
+
 def _build_generation_prompt(query: str, history: list[dict] | None = None) -> str:
     return (
         "You are a Python programmer. Write clean, correct Python code "
@@ -151,8 +178,12 @@ def generate_and_verify_code(
     analysis_evidence, timings["code_analysis"] = _timed(execute_tool, "code_analysis", {"code": code_lines})
     execution_evidence, timings["code_execution"] = _timed(execute_tool, "code_execution", {"code": code_lines})
     revised = False
+    revision_attempted = False
+    revision_reason = None
 
     if needs_revision(analysis_evidence, execution_evidence):
+        revision_attempted = True
+        revision_reason = _describe_problem(analysis_evidence, execution_evidence)
         revision_draft, timings["revision"] = _timed(
             revise_code, query, code_lines, analysis_evidence, execution_evidence, client=client
         )
@@ -174,6 +205,14 @@ def generate_and_verify_code(
             "code": "\n".join(code_lines),
             "analysis": analysis_evidence["result"],
             "execution": execution_evidence["result"],
+            # "iterations" is 1 or 2: this loop is bounded to exactly one
+            # revision pass, never open-ended. "revised" is false when a
+            # revision was attempted but extract_code() couldn't pull a
+            # code block out of it, so the original (still-broken) code
+            # is what's actually being reported here.
+            "iterations": 2 if revision_attempted else 1,
+            "revised": revised,
+            "revision_reason": revision_reason,
         },
         "error": None,
     }

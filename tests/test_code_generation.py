@@ -1,6 +1,15 @@
-"""Tests for the pure-logic pieces of code_generation.py: extract_code()
-and needs_revision(). No model calls - both are plain functions."""
-from src.agent.code_generation import extract_code, needs_revision
+"""Tests for the pure-logic pieces of code_generation.py: extract_code(),
+needs_revision(), _describe_problem(), and generate_and_verify_code()'s
+iteration bookkeeping (with generate_code/revise_code/execute_tool mocked
+out, so the control flow is tested without spending real model calls)."""
+from unittest.mock import patch
+
+from src.agent.code_generation import (
+    _describe_problem,
+    extract_code,
+    generate_and_verify_code,
+    needs_revision,
+)
 
 
 def test_extract_code_pulls_python_fenced_block():
@@ -63,3 +72,83 @@ def test_needs_revision_true_when_analysis_tool_errored():
 
 def test_needs_revision_true_when_execution_tool_errored():
     assert needs_revision(_analysis(), _execution(error="boom")) is True
+
+
+def test_describe_problem_none_when_everything_clean():
+    assert _describe_problem(_analysis(), _execution()) is None
+
+
+def test_describe_problem_reports_syntax_error_message():
+    analysis = _analysis(syntax_valid=False, findings=[{"message": "invalid syntax"}])
+    assert _describe_problem(analysis, _execution()) == "syntax error: invalid syntax"
+
+
+def test_describe_problem_reports_lint_finding_count():
+    analysis = _analysis(findings=[{"rule": "F401"}, {"rule": "E501"}])
+    assert _describe_problem(analysis, _execution()) == "2 lint finding(s)"
+
+
+def test_describe_problem_reports_nonzero_exit_code():
+    assert _describe_problem(_analysis(), _execution(exit_code=1)) == "execution exited with code 1"
+
+
+def test_describe_problem_reports_timeout():
+    result = _describe_problem(_analysis(), _execution(exit_code=None, timed_out=True))
+    assert result == "execution timed out"
+
+
+def test_describe_problem_combines_multiple_problems():
+    analysis = _analysis(findings=[{"rule": "F401"}])
+    result = _describe_problem(analysis, _execution(exit_code=1))
+    assert result == "1 lint finding(s); execution exited with code 1"
+
+
+# --- generate_and_verify_code(): control flow only, model calls mocked out ---
+
+
+_CLEAN_ANALYSIS = {"tool": "code_analysis", "args": {}, "result": {"syntax_valid": True, "findings": []}, "error": None}
+_CLEAN_EXECUTION = {
+    "tool": "code_execution",
+    "args": {},
+    "result": {"stdout": "ok\n", "stderr": "", "exit_code": 0, "timed_out": False},
+    "error": None,
+}
+_BROKEN_ANALYSIS = {
+    "tool": "code_analysis",
+    "args": {},
+    "result": {"syntax_valid": False, "findings": [{"message": "invalid syntax"}]},
+    "error": None,
+}
+
+
+@patch("src.agent.code_generation.execute_tool")
+@patch("src.agent.code_generation.revise_code")
+@patch("src.agent.code_generation.generate_code")
+def test_reports_one_iteration_when_first_pass_is_clean(mock_generate, mock_revise, mock_execute):
+    mock_generate.return_value = "```python\ngood_code()\n```"
+    mock_execute.side_effect = [_CLEAN_ANALYSIS, _CLEAN_EXECUTION]
+
+    evidence, _, revised = generate_and_verify_code("some task")
+
+    assert evidence["result"]["iterations"] == 1
+    assert evidence["result"]["revised"] is False
+    assert evidence["result"]["revision_reason"] is None
+    assert revised is False
+    mock_revise.assert_not_called()
+
+
+@patch("src.agent.code_generation.execute_tool")
+@patch("src.agent.code_generation.revise_code")
+@patch("src.agent.code_generation.generate_code")
+def test_reports_two_iterations_and_the_reason_when_a_revision_fires(mock_generate, mock_revise, mock_execute):
+    mock_generate.return_value = "```python\nbroken code\n```"
+    mock_revise.return_value = "```python\nfixed_code()\n```"
+    mock_execute.side_effect = [_BROKEN_ANALYSIS, _CLEAN_EXECUTION, _CLEAN_ANALYSIS, _CLEAN_EXECUTION]
+
+    evidence, _, revised = generate_and_verify_code("some task")
+
+    assert evidence["result"]["iterations"] == 2
+    assert evidence["result"]["revised"] is True
+    assert evidence["result"]["revision_reason"] == "syntax error: invalid syntax"
+    assert evidence["result"]["code"] == "fixed_code()"
+    assert revised is True
