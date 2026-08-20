@@ -37,10 +37,10 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
     "code_analysis": ToolSpec(
         name="code_analysis",
         description=(
-            "Statically analyze a Python code snippet with ast + ruff to find "
-            "syntax errors, style violations, and structural issues. Use when "
-            "the user asks to review, lint, or explain the structure of code "
-            "without running it."
+            "Statically analyze a Python or C code snippet to find syntax "
+            "errors, style violations, and structural issues (ast + ruff for "
+            "Python, gcc -fsyntax-only for C). Use when the user asks to "
+            "review, lint, or explain the structure of code without running it."
         ),
         parameters={
             "type": "object",
@@ -49,11 +49,16 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "The Python source code to analyze, split into one array "
+                        "The source code to analyze, split into one array "
                         "element per line (no embedded newlines) - avoids the "
                         "model mis-escaping literal newlines inside a single "
                         "JSON string."
                     ),
+                },
+                "language": {
+                    "type": "string",
+                    "enum": ["python", "c"],
+                    "description": "The language `code` is written in. Defaults to python if omitted.",
                 },
             },
             "required": ["code"],
@@ -63,10 +68,10 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
     "code_execution": ToolSpec(
         name="code_execution",
         description=(
-            "Run a Python code snippet in a sandboxed subprocess and capture "
-            "stdout, stderr, and exceptions. Use when the user asks to run "
-            "code, check its output, or verify a solution to a programming "
-            "problem."
+            "Run a Python or C code snippet in a sandboxed subprocess (C is "
+            "compiled with gcc first) and capture stdout, stderr, and "
+            "exceptions. Use when the user asks to run code, check its "
+            "output, or verify a solution to a programming problem."
         ),
         parameters={
             "type": "object",
@@ -75,7 +80,7 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "The Python source code to execute, split into one array "
+                        "The source code to execute, split into one array "
                         "element per line (no embedded newlines) - avoids the "
                         "model mis-escaping literal newlines inside a single "
                         "JSON string."
@@ -85,8 +90,33 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
                     "type": "string",
                     "description": "Optional input to feed the program via stdin.",
                 },
+                "language": {
+                    "type": "string",
+                    "enum": ["python", "c"],
+                    "description": "The language `code` is written in. Defaults to python if omitted.",
+                },
             },
             "required": ["code"],
+            "additionalProperties": False,
+        },
+    ),
+    "web_fetch": ToolSpec(
+        name="web_fetch",
+        description=(
+            "Fetch a specific URL and return its readable text content. Use "
+            "only when the request names or pastes an explicit URL to read, "
+            "fetch, or summarize - not for general web search or topics "
+            "without a given link."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The exact URL to fetch.",
+                },
+            },
+            "required": ["url"],
             "additionalProperties": False,
         },
     ),

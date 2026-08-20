@@ -31,7 +31,7 @@ def _print_generation_details(evidence: dict) -> None:
     if not result:
         return
 
-    print(f"[code generation] iterations: {result['iterations']}")
+    print(f"[code generation] language: {result['language']} | iterations: {result['iterations']}")
     if result["revised"]:
         print(f"  first attempt failed verification ({result['revision_reason']}) -> revised and re-verified")
     elif result["revision_reason"] is not None:

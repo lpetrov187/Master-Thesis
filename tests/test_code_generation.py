@@ -15,13 +15,13 @@ from src.agent.code_generation import (
 def test_extract_code_pulls_python_fenced_block():
     draft = "Here's the code:\n\n```python\ndef add(a, b):\n    return a + b\n```\n\nDone."
 
-    assert extract_code(draft) == ["def add(a, b):", "    return a + b"]
+    assert extract_code(draft) == (["def add(a, b):", "    return a + b"], "python")
 
 
 def test_extract_code_handles_bare_fence_with_no_language_tag():
     draft = "```\nprint('hi')\n```"
 
-    assert extract_code(draft) == ["print('hi')"]
+    assert extract_code(draft) == (["print('hi')"], "python")
 
 
 def test_extract_code_returns_none_when_no_fenced_block():
@@ -35,7 +35,25 @@ def test_extract_code_returns_none_for_empty_fenced_block():
 def test_extract_code_takes_the_first_of_multiple_blocks():
     draft = "```python\nfirst_block()\n```\nsome text\n```python\nsecond_block()\n```"
 
-    assert extract_code(draft) == ["first_block()"]
+    assert extract_code(draft) == (["first_block()"], "python")
+
+
+def test_extract_code_detects_c_fence():
+    draft = "```c\nint main() { return 0; }\n```"
+
+    assert extract_code(draft) == (["int main() { return 0; }"], "c")
+
+
+def test_extract_code_c_tag_is_case_insensitive():
+    draft = "```C\nint main() { return 0; }\n```"
+
+    assert extract_code(draft) == (["int main() { return 0; }"], "c")
+
+
+def test_extract_code_unrecognized_tag_defaults_to_python():
+    draft = "```javascript\nconsole.log('hi')\n```"
+
+    assert extract_code(draft) == (["console.log('hi')"], "python")
 
 
 def _analysis(syntax_valid=True, findings=None, error=None):
@@ -133,8 +151,11 @@ def test_reports_one_iteration_when_first_pass_is_clean(mock_generate, mock_revi
     assert evidence["result"]["iterations"] == 1
     assert evidence["result"]["revised"] is False
     assert evidence["result"]["revision_reason"] is None
+    assert evidence["result"]["language"] == "python"
     assert revised is False
     mock_revise.assert_not_called()
+    mock_execute.assert_any_call("code_analysis", {"code": ["good_code()"], "language": "python"})
+    mock_execute.assert_any_call("code_execution", {"code": ["good_code()"], "language": "python"})
 
 
 @patch("src.agent.code_generation.execute_tool")
@@ -151,4 +172,22 @@ def test_reports_two_iterations_and_the_reason_when_a_revision_fires(mock_genera
     assert evidence["result"]["revised"] is True
     assert evidence["result"]["revision_reason"] == "syntax error: invalid syntax"
     assert evidence["result"]["code"] == "fixed_code()"
+    assert evidence["result"]["language"] == "python"
     assert revised is True
+
+
+@patch("src.agent.code_generation.execute_tool")
+@patch("src.agent.code_generation.generate_code")
+def test_detects_c_language_from_the_fence_tag(mock_generate, mock_execute):
+    mock_generate.return_value = "```c\nint main() { return 0; }\n```"
+    mock_execute.side_effect = [_CLEAN_ANALYSIS, _CLEAN_EXECUTION]
+
+    evidence, _, _ = generate_and_verify_code("some task")
+
+    assert evidence["result"]["language"] == "c"
+    mock_execute.assert_any_call(
+        "code_analysis", {"code": ["int main() { return 0; }"], "language": "c"}
+    )
+    mock_execute.assert_any_call(
+        "code_execution", {"code": ["int main() { return 0; }"], "language": "c"}
+    )

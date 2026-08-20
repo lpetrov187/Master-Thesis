@@ -19,7 +19,7 @@ from src.agent.history import format_history
 from src.agent.tool_executor import execute_tool
 from src.config import OLLAMA_HOST, PRIMARY_MODEL
 
-_FENCE_RE = re.compile(r"```[\w+-]*\n(.*?)```", re.DOTALL)
+_FENCE_RE = re.compile(r"```(?P<lang>[\w+-]*)\n(?P<code>.*?)```", re.DOTALL)
 
 
 def _timed(fn, *args, **kwargs):
@@ -29,21 +29,24 @@ def _timed(fn, *args, **kwargs):
     return result, time.perf_counter() - start
 
 
-def extract_code(draft: str) -> list[str] | None:
-    """Pull the first fenced code block out of `draft` and return it as a
-    list of lines - matching code_analysis/code_execution's line-array arg
-    schema (the Day 12 fix, avoiding the model mis-escaping embedded
-    newlines in a single JSON string). Returns None if no fenced block is
-    found, or the block is empty."""
+def extract_code(draft: str) -> tuple[list[str], str] | None:
+    """Pull the first fenced code block out of `draft`, plus the language
+    its fence was tagged with. Returns (lines, language) - lines matching
+    code_analysis/code_execution's line-array arg schema (the Day 12 fix,
+    avoiding the model mis-escaping embedded newlines in a single JSON
+    string). `language` is "c" for a ```c fence, else "python" (the
+    default, including an untagged fence). Returns None if no fenced block
+    is found, or the block is empty."""
     match = _FENCE_RE.search(draft)
     if match is None:
         return None
 
-    code = match.group(1).rstrip("\n")
+    code = match.group("code").rstrip("\n")
     if not code.strip():
         return None
 
-    return code.split("\n")
+    language = "c" if match.group("lang").strip().lower() == "c" else "python"
+    return code.split("\n"), language
 
 
 def needs_revision(analysis_evidence: dict, execution_evidence: dict) -> bool:
@@ -91,13 +94,16 @@ def _describe_problem(analysis_evidence: dict, execution_evidence: dict) -> str 
 
 def _build_generation_prompt(query: str, history: list[dict] | None = None) -> str:
     return (
-        "You are a Python programmer. Write clean, correct Python code "
-        "that solves the user's request below. Return ONLY the code in a "
-        "single fenced code block (```python ... ```) - no other tools or "
-        "documentation are available, so the code must be self-contained "
-        "and runnable as-is, using only the Python standard library. If "
-        "the request includes example input, make the code actually run "
-        "on that input and print the result.\n\n"
+        "You are a programmer. Write clean, correct code that solves the "
+        "user's request below, in whichever language the request asks for "
+        "- Python or C. Default to Python if no language is specified. "
+        "Return ONLY the code in a single fenced code block, tagged with "
+        "its language (```python ... ``` or ```c ... ```) - no other tools "
+        "or documentation are available, so the code must be self-contained "
+        "and runnable as-is (Python: standard library only; C: standard C "
+        "library only, compiled with gcc). If the request includes example "
+        "input, make the code actually run on that input and print the "
+        "result.\n\n"
         f"{format_history(history)}"
         f"Request:\n{query}"
     )
@@ -115,15 +121,18 @@ def generate_code(query: str, client: ollama.Client | None = None, history: list
 
 
 def _build_revision_prompt(
-    query: str, code_lines: list[str], analysis_evidence: dict, execution_evidence: dict
+    query: str, code_lines: list[str], language: str, analysis_evidence: dict, execution_evidence: dict
 ) -> str:
     code = "\n".join(code_lines)
+    lang_name = "C" if language == "c" else "Python"
     return (
-        "You previously wrote this Python code to solve a request, but it "
-        "has a problem. Fix it and return ONLY the corrected code in a "
-        "single fenced code block (```python ... ```).\n\n"
+        f"You previously wrote this {lang_name} code to solve a request, "
+        "but it has a problem. Fix it and return ONLY the corrected code "
+        f"in a single fenced code block (```{language} ... ```), keeping "
+        "the same language unless the request specifically asks for a "
+        "different one.\n\n"
         f"Original request:\n{query}\n\n"
-        f"Your code:\n```python\n{code}\n```\n\n"
+        f"Your code:\n```{language}\n{code}\n```\n\n"
         f"Static analysis result: {analysis_evidence['result']}\n\n"
         f"Execution result: {execution_evidence['result']}"
     )
@@ -132,6 +141,7 @@ def _build_revision_prompt(
 def revise_code(
     query: str,
     code_lines: list[str],
+    language: str,
     analysis_evidence: dict,
     execution_evidence: dict,
     client: ollama.Client | None = None,
@@ -143,7 +153,9 @@ def revise_code(
         messages=[
             {
                 "role": "user",
-                "content": _build_revision_prompt(query, code_lines, analysis_evidence, execution_evidence),
+                "content": _build_revision_prompt(
+                    query, code_lines, language, analysis_evidence, execution_evidence
+                ),
             }
         ],
     )
@@ -165,8 +177,8 @@ def generate_and_verify_code(
     timings: dict = {}
 
     draft, timings["generation"] = _timed(generate_code, query, client=client, history=history)
-    code_lines = extract_code(draft)
-    if code_lines is None:
+    extracted = extract_code(draft)
+    if extracted is None:
         evidence = {
             "tool": "generate_and_verify_code",
             "args": {"task": query},
@@ -174,9 +186,14 @@ def generate_and_verify_code(
             "error": "couldn't extract a code block from the generated draft",
         }
         return evidence, timings, False
+    code_lines, language = extracted
 
-    analysis_evidence, timings["code_analysis"] = _timed(execute_tool, "code_analysis", {"code": code_lines})
-    execution_evidence, timings["code_execution"] = _timed(execute_tool, "code_execution", {"code": code_lines})
+    analysis_evidence, timings["code_analysis"] = _timed(
+        execute_tool, "code_analysis", {"code": code_lines, "language": language}
+    )
+    execution_evidence, timings["code_execution"] = _timed(
+        execute_tool, "code_execution", {"code": code_lines, "language": language}
+    )
     revised = False
     revision_attempted = False
     revision_reason = None
@@ -185,16 +202,16 @@ def generate_and_verify_code(
         revision_attempted = True
         revision_reason = _describe_problem(analysis_evidence, execution_evidence)
         revision_draft, timings["revision"] = _timed(
-            revise_code, query, code_lines, analysis_evidence, execution_evidence, client=client
+            revise_code, query, code_lines, language, analysis_evidence, execution_evidence, client=client
         )
-        revised_lines = extract_code(revision_draft)
-        if revised_lines is not None:
-            code_lines = revised_lines
+        revised_extracted = extract_code(revision_draft)
+        if revised_extracted is not None:
+            code_lines, language = revised_extracted
             analysis_evidence, timings["retry_code_analysis"] = _timed(
-                execute_tool, "code_analysis", {"code": code_lines}
+                execute_tool, "code_analysis", {"code": code_lines, "language": language}
             )
             execution_evidence, timings["retry_code_execution"] = _timed(
-                execute_tool, "code_execution", {"code": code_lines}
+                execute_tool, "code_execution", {"code": code_lines, "language": language}
             )
             revised = True
 
@@ -203,6 +220,7 @@ def generate_and_verify_code(
         "args": {"task": query},
         "result": {
             "code": "\n".join(code_lines),
+            "language": language,
             "analysis": analysis_evidence["result"],
             "execution": execution_evidence["result"],
             # "iterations" is 1 or 2: this loop is bounded to exactly one

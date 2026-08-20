@@ -22,3 +22,28 @@ def test_clean_code_has_no_findings():
 
     assert result["syntax_valid"] is True
     assert result["findings"] == []
+
+
+# --- C support (gcc -fsyntax-only), added alongside the code-generation loop ---
+
+
+def test_c_flags_syntax_error():
+    result = analyze("int main() { return 0 }", language="c")
+
+    assert result["syntax_valid"] is False
+    assert result["findings"]
+    assert result["findings"][0]["rule"] == "error"
+
+
+def test_c_flags_warning_in_valid_code():
+    result = analyze("int main() { int unused; return 0; }", language="c")
+
+    assert result["syntax_valid"] is True
+    assert any(f["rule"] == "-Wunused-variable" for f in result["findings"])
+
+
+def test_c_clean_code_has_no_findings():
+    result = analyze("int main() { return 0; }", language="c")
+
+    assert result["syntax_valid"] is True
+    assert result["findings"] == []
