@@ -1,12 +1,13 @@
 """Tool Executor: dispatches a Tool Selector's choice to the actual tool
 function and packages the result as structured evidence.
 """
-from src.tools import code_analysis, code_execution, doc_rag
+from src.tools import code_analysis, code_execution, doc_rag, web_fetch
 
 _TOOL_FUNCTIONS = {
     "doc_rag": doc_rag.retrieve,
     "code_analysis": code_analysis.analyze,
     "code_execution": code_execution.run,
+    "web_fetch": web_fetch.fetch,
 }
 
 

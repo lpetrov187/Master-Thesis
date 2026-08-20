@@ -26,14 +26,19 @@ def _format_evidence(evidence: dict) -> str:
 
     doc_rag's result is a list of {"text", "source", "distance"} hits, whose
     default repr mashes multiple docs' text into one hard-to-parse blob -
-    format those explicitly, one labeled passage per hit. The other tools'
-    results are already small, flat dicts, so their default repr is fine.
+    format those explicitly, one labeled passage per hit. web_fetch's text
+    can be long, so it gets its own compact "[from url - title]" header
+    instead of a dict repr with escaped quotes. The other tools' results
+    are already small, flat dicts, so their default repr is fine.
     """
     result = evidence["result"]
     if evidence["tool"] == "doc_rag":
         return "\n\n".join(
             f"[source: {hit['source']}, section: {hit['heading'] or '(none)'}]\n{hit['text']}" for hit in result
         )
+    if evidence["tool"] == "web_fetch":
+        header = f"[from {result['url']}" + (f" - {result['title']}]" if result["title"] else "]")
+        return f"{header}\n{result['text']}"
     return str(result)
 
 

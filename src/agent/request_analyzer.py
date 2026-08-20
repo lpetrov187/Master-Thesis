@@ -25,8 +25,9 @@ def _build_prompt(query: str, history: list[dict] | None = None) -> str:
         "Classify the user's request into exactly one action:\n\n"
         '- "lookup_or_inspect": the request needs a documentation lookup '
         "(names a specific library/API and asks how to use or configure "
-        "it), OR the request already contains a code snippet to statically "
-        "analyze or run.\n"
+        "it), the request already contains a code snippet to statically "
+        "analyze or run, OR the request names or pastes a specific URL to "
+        "fetch, read, or summarize.\n"
         '- "generate": the request describes a coding task to *implement* '
         "from scratch - no existing code is given, and no specific "
         "library/API is being looked up. The agent should write new code "
@@ -50,7 +51,9 @@ def _build_prompt(query: str, history: list[dict] | None = None) -> str:
         '- "can you tell me the how does one configure timeouts in httpx" '
         "(redundant, ungrammatical phrasing - but still names a specific "
         "library and asks how to configure something, so it's still a "
-        "documentation lookup)\n\n"
+        "documentation lookup)\n"
+        '- "what does this page say: https://example.com/release-notes" '
+        "(names a specific URL to fetch and read)\n\n"
         'Examples of "generate":\n'
         '- "Write a function that sorts a list of integers." '
         "(task to implement, no existing code, no library named)\n"
@@ -64,8 +67,9 @@ def _build_prompt(query: str, history: list[dict] | None = None) -> str:
         "Rule of thumb: if the request contains an actual code snippet "
         "(even a one-line one, even without a code block), it's "
         '"lookup_or_inspect" - no exceptions. If it names a specific '
-        "library/API and asks how to use or configure it, it's also "
-        '"lookup_or_inspect". If it instead describes a task to build with '
+        "library/API and asks how to use or configure it, or it names a "
+        'specific URL to fetch/read/summarize, it\'s also "lookup_or_inspect". '
+        'If it instead describes a task to build with '
         'no code and no library named, it\'s "generate". Judge the '
         "request's underlying intent only - ignore grammar, typos, "
         "redundant words, or awkward phrasing; a badly-worded request "

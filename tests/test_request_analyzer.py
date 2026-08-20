@@ -23,3 +23,8 @@ def test_classifies_a_code_generation_task():
 def test_classifies_general_knowledge_as_none():
     result = analyze_request("What's a friendly way to greet someone in an email?")
     assert result["action"] == "none"
+
+
+def test_classifies_a_url_naming_request():
+    result = analyze_request("Can you summarize what's on this page? https://www.python.org/about/")
+    assert result["action"] == "lookup_or_inspect"

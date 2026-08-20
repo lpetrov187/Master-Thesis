@@ -49,3 +49,19 @@ def test_execute_tool_leaves_plain_string_code_untouched():
     evidence = tool_executor.execute_tool("code_analysis", {"code": "def f():\n    pass\n"})
 
     assert evidence["error"] is None
+
+
+def test_execute_tool_dispatches_web_fetch(monkeypatch):
+    received = {}
+
+    def spy_fetch(**kwargs):
+        received.update(kwargs)
+        return {"url": kwargs["url"], "title": "t", "text": "x", "truncated": False}
+
+    monkeypatch.setitem(tool_executor._TOOL_FUNCTIONS, "web_fetch", spy_fetch)
+
+    evidence = tool_executor.execute_tool("web_fetch", {"url": "https://example.com"})
+
+    assert evidence["error"] is None
+    assert received["url"] == "https://example.com"
+    assert evidence["result"]["title"] == "t"
