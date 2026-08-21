@@ -14,9 +14,10 @@ from pathlib import Path
 from src.agent.baseline import run as run_baseline
 from src.agent.orchestrator import run as run_agent
 from src.config import EVAL_DIR
-from src.eval.tasks import load_tasks
+from src.eval.tasks import load_holdout_tasks, load_tasks
 
 _RESULTS_PATH = EVAL_DIR / "results.json"
+_HOLDOUT_RESULTS_PATH = EVAL_DIR / "results_holdout.json"
 
 
 def run_eval(tasks: list[dict] | None = None, verbose: bool = True) -> list[dict]:
@@ -59,6 +60,11 @@ if __name__ == "__main__":
     from src.tools.doc_rag import ingest
 
     ingest()
-    eval_results = run_eval()
-    save_results(eval_results)
-    print(f"Saved {len(eval_results)} task results to {_RESULTS_PATH}")
+
+    dev_results = run_eval(load_tasks())
+    save_results(dev_results, path=_RESULTS_PATH)
+    print(f"Saved {len(dev_results)} dev-set task results to {_RESULTS_PATH}")
+
+    holdout_results = run_eval(load_holdout_tasks())
+    save_results(holdout_results, path=_HOLDOUT_RESULTS_PATH)
+    print(f"Saved {len(holdout_results)} held-out task results to {_HOLDOUT_RESULTS_PATH}")

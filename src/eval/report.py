@@ -11,19 +11,21 @@ import matplotlib.pyplot as plt
 REPORTS_DIR = Path(__file__).resolve().parent.parent.parent / "reports"
 
 
-def build_markdown_report(metrics: dict) -> str:
+def build_markdown_report(metrics: dict, label: str = "", caveat: str = "") -> str:
     """Render `metrics` as a markdown report: overall numbers, the
-    hallucination-category breakdown, and a per-category comparison table."""
-    g = metrics["groundedness"]
-    groundedness_line = (
-        f"| Groundedness score (mean, n={g['count']}) | {g['mean']:.3f} (min {g['min']:.3f}, max {g['max']:.3f}) |"
-        if g["mean"] is not None
-        else "| Groundedness score | n/a - no verified tasks |"
-    )
+    hallucination-category breakdown, and a per-category comparison table.
 
+    `label` (optional) is appended to the title, e.g. "(held-out set)".
+    `caveat` (optional) is a short note rendered right under the title -
+    used to flag a set's leakage/generalization status.
+    """
     lines = [
-        "# Evaluation Report",
+        f"# Evaluation Report{f' {label}' if label else ''}",
         "",
+    ]
+    if caveat:
+        lines += [caveat, ""]
+    lines += [
         f"{metrics['n_tasks']} tasks, agent pipeline vs. no-tool baseline.",
         "",
         "## Overall",
@@ -35,7 +37,6 @@ def build_markdown_report(metrics: dict) -> str:
         f"| Baseline hallucination rate | {metrics['baseline_hallucination_rate']:.1%} |",
         f"| Agent task success rate | {metrics['agent_task_success_rate']:.1%} |",
         f"| Baseline task success rate | {metrics['baseline_task_success_rate']:.1%} |",
-        groundedness_line,
         "",
         "## Agent hallucination breakdown",
         "",
@@ -44,7 +45,7 @@ def build_markdown_report(metrics: dict) -> str:
             "`evidence_corruption` = the claim was faithfully grounded in tool "
             "evidence, but that evidence was itself wrong due to an upstream "
             "bug (see PLAN.md) - a different failure mode than the Controlled-"
-            "Access/Claim-Verifier mechanisms are designed to catch."
+            "Access policy is designed to catch."
         ),
         "",
         "| Category | Count |",
@@ -96,40 +97,40 @@ def build_comparison_chart(metrics: dict, path: Path) -> None:
     plt.close(fig)
 
 
-def build_groundedness_chart(results: list[dict], path: Path) -> None:
-    """Histogram of the agent's groundedness scores across verified tasks."""
-    scores = [
-        r["agent_trace"]["verification"]["groundedness_score"]
-        for r in results
-        if r["agent_trace"]["verification"] is not None
-    ]
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.hist(scores, bins=[0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.01], edgecolor="black")
-    ax.set_xlabel("Groundedness score")
-    ax.set_ylabel("Task count")
-    ax.set_title(f"Groundedness score distribution (n={len(scores)})")
-    fig.tight_layout()
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path)
-    plt.close(fig)
-
-
 if __name__ == "__main__":
     import json
 
     from src.config import EVAL_DIR
-    from src.eval.annotations import load_annotations
+    from src.eval.annotations import load_annotations, load_holdout_annotations
     from src.eval.metrics import compute_metrics
 
-    results = json.loads((EVAL_DIR / "results.json").read_text(encoding="utf-8"))
-    annotations = load_annotations()
-    metrics = compute_metrics(results, annotations)
+    def _build_one_report(results_filename: str, annotations_loader, label: str, caveat: str, out_prefix: str) -> None:
+        results_path = EVAL_DIR / results_filename
+        results = json.loads(results_path.read_text(encoding="utf-8"))
+        annotations = annotations_loader()
+        metrics = compute_metrics(results, annotations)
 
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    (REPORTS_DIR / "day11_eval_report.md").write_text(build_markdown_report(metrics), encoding="utf-8")
-    build_comparison_chart(metrics, REPORTS_DIR / "figures" / "comparison_bar.png")
-    build_groundedness_chart(results, REPORTS_DIR / "figures" / "groundedness_hist.png")
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        report_text = build_markdown_report(metrics, label=label, caveat=caveat)
+        (REPORTS_DIR / f"{out_prefix}_eval_report.md").write_text(report_text, encoding="utf-8")
+        build_comparison_chart(metrics, REPORTS_DIR / "figures" / f"{out_prefix}_comparison_bar.png")
+        print(f"Wrote {out_prefix} report + chart to {REPORTS_DIR}")
 
-    print(f"Wrote report + charts to {REPORTS_DIR}")
+    _build_one_report(
+        "results.json",
+        load_annotations,
+        label="(dev set)",
+        caveat=(
+            "**Dev set - do not cite these numbers as evidence of generalization.** "
+            "Used for iteration/debugging; see PLAN.md's eval-set-leakage section. "
+            "Report the held-out set's numbers instead."
+        ),
+        out_prefix="dev",
+    )
+    _build_one_report(
+        "results_holdout.json",
+        load_holdout_annotations,
+        label="(held-out set)",
+        caveat="Held-out set - never referenced by any prompt or debugging session. These are the numbers to cite.",
+        out_prefix="holdout",
+    )

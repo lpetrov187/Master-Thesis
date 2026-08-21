@@ -1,0 +1,76 @@
+[
+  {
+    "id": "doc_search_ho_01",
+    "category": "doc_search",
+    "query": "How do I write async tests for a FastAPI application?",
+    "expected_tool": "doc_rag",
+    "reference_answer": "Use pytest.mark.anyio on async test functions, and use httpx's AsyncClient (with ASGITransport wrapping the app) directly instead of TestClient, since TestClient's sync-to-async bridging doesn't work inside an already-async test function."
+  },
+  {
+    "id": "doc_search_ho_02",
+    "category": "doc_search",
+    "query": "Can I use any ASGI middleware with FastAPI, not just the built-in ones?",
+    "expected_tool": "doc_rag",
+    "reference_answer": "Yes - since FastAPI is built on Starlette and implements the ASGI spec, any ASGI-compliant middleware works, added via app.add_middleware(SomeMiddleware, **config). It doesn't need to be written specifically for FastAPI or Starlette."
+  },
+  {
+    "id": "doc_search_ho_03",
+    "category": "doc_search",
+    "query": "What's the recommended way to manage application settings and secrets in FastAPI?",
+    "expected_tool": "doc_rag",
+    "reference_answer": "Use pydantic-settings: create a class inheriting from BaseSettings with typed attributes (and optional defaults), which reads matching values from environment variables automatically, with validation the same way a normal Pydantic model works."
+  },
+  {
+    "id": "doc_search_ho_04",
+    "category": "doc_search",
+    "query": "How do I connect a FastAPI application to a SQL database?",
+    "expected_tool": "doc_rag",
+    "reference_answer": "FastAPI doesn't require a specific database library - the docs demonstrate SQLModel (built on SQLAlchemy + Pydantic, by the same author as FastAPI) as a good match, supporting any SQLAlchemy-compatible database (PostgreSQL, MySQL, SQLite, etc.), commonly SQLite for local examples."
+  },
+  {
+    "id": "code_generation_ho_01",
+    "category": "code_generation",
+    "query": "Write a function that converts a temperature from Celsius to Fahrenheit, then run it on 100.",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "212.0",
+    "reference_answer": "F = C * 9/5 + 32, so 100C = 212F. Output may print as 212.0 or 212 depending on whether the result is float or int - both are correct."
+  },
+  {
+    "id": "code_generation_ho_02",
+    "category": "code_generation",
+    "query": "Write a function that checks whether a number is prime, then run it on 97.",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "True",
+    "reference_answer": "97 is not divisible by any integer from 2 up to its square root (~9.85), so it is prime - result should be True."
+  },
+  {
+    "id": "code_generation_ho_03",
+    "category": "code_generation",
+    "query": "Write a function that reverses the order of words in a sentence (not the characters), then run it on 'hello world foo'.",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "foo world hello",
+    "reference_answer": "Reversing word order (not spelling) of 'hello world foo' gives 'foo world hello'."
+  },
+  {
+    "id": "code_generation_ho_04",
+    "category": "code_generation",
+    "query": "Write a C program that computes the length of a string without using strlen, then run it on the string \"testing\".",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "7",
+    "reference_answer": "\"testing\" has 7 characters."
+  },
+  {
+    "id": "web_fetch_ho_01",
+    "category": "web_fetch",
+    "query": "Can you summarize this page? https://en.wikipedia.org/wiki/HTTP",
+    "expected_tool": "web_fetch",
+    "reference_answer": "Wikipedia's article on HTTP (Hypertext Transfer Protocol) - explains it as the foundational application-layer protocol of the World Wide Web, used for transferring hypermedia documents such as HTML."
+  },
+  {
+    "id": "web_fetch_ho_02",
+    "category": "web_fetch",
+    "query": "What is this document about? https://www.rfc-editor.org/rfc/rfc2616",
+    "expected_tool": "web_fetch",
+    "reference_answer": "RFC 2616, the technical specification for HTTP/1.1 (Hypertext Transfer Protocol) - defines the protocol's syntax and semantics for client-server communication on the web."
+  }
+]

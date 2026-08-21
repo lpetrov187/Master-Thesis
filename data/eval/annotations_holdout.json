@@ -1,0 +1,118 @@
+{
+  "meta": {
+    "status": "TEMPLATE - not yet annotated, fill in after running the fixed eval framework (held-out set)",
+    "instructions": "Fill in every row after running src/eval/runner.py on the target machine. tool_selection_correct: for doc_search/web_fetch, did trace[\"selection\"][\"tool\"] match expected_tool; for code_generation, did the Request Analyzer route to the generate action (there is no tool_selector step for this category). agent_hallucination / *_task_success are judgment calls - compare the trace answer against reference_answer (and expected_output for code_generation tasks, which can be checked directly against the execution evidence). Set reviewed=true once a row has actually been judged - unreviewed rows default to false/\"none\" placeholders, not real judgments, and should not be trusted for reporting until reviewed."
+  },
+  "annotations": [
+    {
+      "task_id": "doc_search_ho_01",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    },
+    {
+      "task_id": "doc_search_ho_02",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    },
+    {
+      "task_id": "doc_search_ho_03",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    },
+    {
+      "task_id": "doc_search_ho_04",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    },
+    {
+      "task_id": "code_generation_ho_01",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    },
+    {
+      "task_id": "code_generation_ho_02",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    },
+    {
+      "task_id": "code_generation_ho_03",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    },
+    {
+      "task_id": "code_generation_ho_04",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    },
+    {
+      "task_id": "web_fetch_ho_01",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    },
+    {
+      "task_id": "web_fetch_ho_02",
+      "tool_selection_correct": false,
+      "agent_hallucination": false,
+      "agent_hallucination_category": "none",
+      "agent_task_success": false,
+      "baseline_hallucination": false,
+      "baseline_task_success": false,
+      "notes": "",
+      "reviewed": false
+    }
+  ]
+}

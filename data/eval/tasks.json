@@ -2,169 +2,149 @@
   {
     "id": "doc_search_01",
     "category": "doc_search",
-    "query": "How do I reuse a requests Session across multiple requests?",
+    "query": "How do I define a request body using a Pydantic model in FastAPI?",
     "expected_tool": "doc_rag",
-    "reference_answer": "Create a requests.Session() object and reuse it for multiple .get()/.post() calls instead of calling requests.get() each time; the Session reuses the underlying TCP connection via urllib3's HTTPAdapter connection pool."
+    "reference_answer": "Define a class that inherits from pydantic.BaseModel with typed attributes, then declare it as a parameter's type on the path operation function (e.g. async def create_item(item: Item)). FastAPI reads the request body as JSON, validates it against the model, and gives you a validated Item instance."
   },
   {
     "id": "doc_search_02",
     "category": "doc_search",
-    "query": "What is the default connection pool size for a requests Session?",
+    "query": "How do I return a custom response model in FastAPI?",
     "expected_tool": "doc_rag",
-    "reference_answer": "By default requests.Session uses an HTTPAdapter with pool_connections=10 and pool_maxsize=10."
+    "reference_answer": "Annotate the path operation function's return type (e.g. async def read_items() -> list[Item]), or use the response_model parameter on the decorator when the return type doesn't match exactly. FastAPI uses it to validate, document (OpenAPI/JSON Schema), and filter the returned data to that shape."
   },
   {
     "id": "doc_search_03",
     "category": "doc_search",
-    "query": "How do I configure connection pooling in SQLAlchemy?",
+    "query": "How do I enable CORS in a FastAPI application?",
     "expected_tool": "doc_rag",
-    "reference_answer": "Pass pool_size, max_overflow, pool_timeout, and pool_recycle to create_engine(...). pool_size sets connections kept open, max_overflow allows temporary extra connections under load, and pool_recycle closes/replaces connections older than the given number of seconds."
+    "reference_answer": "Import CORSMiddleware from fastapi.middleware.cors, build a list of allowed origins, and register it with app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, ...). You can also configure allowed methods and headers, or use \"*\" as a wildcard (though wildcard origins can't be combined with credentials)."
   },
   {
     "id": "doc_search_04",
     "category": "doc_search",
-    "query": "How can I disable connection pooling entirely for a short-lived SQLAlchemy script?",
+    "query": "How do I run a background task in FastAPI?",
     "expected_tool": "doc_rag",
-    "reference_answer": "Use NullPool, which disables pooling so every connection is opened and closed immediately instead of being kept in a pool."
+    "reference_answer": "Add a parameter typed as BackgroundTasks to the path operation function, then call background_tasks.add_task(func, *args) with a task function and its arguments. FastAPI runs it after the response has been sent, so the client doesn't wait for it."
   },
   {
     "id": "doc_search_05",
     "category": "doc_search",
-    "query": "How do I create a pytest fixture that is shared across an entire test module instead of being recreated per test?",
+    "query": "How do I serve static files in FastAPI?",
     "expected_tool": "doc_rag",
-    "reference_answer": "Pass scope=\"module\" (or scope=\"session\") to @pytest.fixture. Fixtures default to function scope, meaning pytest re-runs them for every test function that requests them."
+    "reference_answer": "Import StaticFiles from fastapi.staticfiles and mount it at a path: app.mount(\"/static\", StaticFiles(directory=\"static\"), name=\"static\"). Mounting adds a fully independent sub-application handling every path under that prefix."
   },
   {
     "id": "doc_search_06",
     "category": "doc_search",
-    "query": "Can a pytest fixture depend on another fixture?",
+    "query": "How do I use OAuth2 password flow for authentication in FastAPI?",
     "expected_tool": "doc_rag",
-    "reference_answer": "Yes - a fixture can depend on another fixture by naming it as an argument, and pytest resolves the dependency graph automatically."
+    "reference_answer": "Use OAuth2PasswordBearer from fastapi.security, instantiate it with the token URL (e.g. OAuth2PasswordBearer(tokenUrl=\"token\")), and declare it as a dependency on a path operation (token: Annotated[str, Depends(oauth2_scheme)]) to extract the bearer token from the Authorization header."
   },
   {
     "id": "doc_search_07",
     "category": "doc_search",
-    "query": "What is the recommended way to get a logger in a Python module?",
+    "query": "How do I write a custom exception handler in FastAPI?",
     "expected_tool": "doc_rag",
-    "reference_answer": "Call logging.getLogger(__name__) in each module rather than using the root logger directly, so log lines are attributable to the module that produced them and per-module log levels can be tuned independently."
+    "reference_answer": "Raise fastapi.HTTPException(status_code=..., detail=...) inside a path operation (or a function it calls) to return an HTTP error response with that status code and detail message to the client - it's a normal Python exception, so it's raised, not returned."
   },
   {
     "id": "doc_search_08",
     "category": "doc_search",
-    "query": "Does calling logging.basicConfig() twice in the same process do anything the second time?",
+    "query": "How do I handle file uploads in FastAPI?",
     "expected_tool": "doc_rag",
-    "reference_answer": "No - basicConfig only has an effect the first time it's called; calling it again in the same process is a no-op unless force=True is passed."
+    "reference_answer": "Import File and UploadFile from fastapi and declare a parameter like file: UploadFile (or file: Annotated[bytes, File()] for raw bytes). UploadFile is preferred for larger files since it's spooled to disk instead of held fully in memory. Requires the python-multipart package to be installed."
   },
   {
-    "id": "code_analysis_01",
-    "category": "code_analysis",
-    "query": "Can you review this code for issues?\n\nimport os\n\ndef greet(name):\n    return f'Hello, {name}!'\n",
-    "expected_tool": "code_analysis",
-    "reference_answer": "Code is syntactically valid. ruff should flag F401 - `os` is imported but never used."
+    "id": "code_generation_01",
+    "category": "code_generation",
+    "query": "Write a function that computes the factorial of a number, then run it on 5.",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "120",
+    "reference_answer": "5! = 120. The printed output should be 120."
   },
   {
-    "id": "code_analysis_02",
-    "category": "code_analysis",
-    "query": "Is there anything wrong with this function?\n\ndef add(a, b)\n    return a + b\n",
-    "expected_tool": "code_analysis",
-    "reference_answer": "The code is not syntactically valid - a colon is missing after the function signature (`def add(a, b):`)."
+    "id": "code_generation_02",
+    "category": "code_generation",
+    "query": "Write a function that checks whether a string is a palindrome, then run it on 'racecar'.",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "True",
+    "reference_answer": "'racecar' reads the same forwards and backwards, so the result should be True (or an equivalent truthy print like 'is a palindrome')."
   },
   {
-    "id": "code_analysis_03",
-    "category": "code_analysis",
-    "query": "Please review this function for problems.\n\ndef multiply(a, b):\n    return a * b\n",
-    "expected_tool": "code_analysis",
-    "reference_answer": "The code is syntactically valid and has no lint findings under ruff's rule set - it's clean."
+    "id": "code_generation_03",
+    "category": "code_generation",
+    "query": "Write a function that removes duplicate values from a list while preserving the original order, then run it on [1, 2, 2, 3, 1, 4].",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "[1, 2, 3, 4]",
+    "reference_answer": "Keeping first occurrences in order: [1, 2, 2, 3, 1, 4] -> [1, 2, 3, 4]."
   },
   {
-    "id": "code_analysis_04",
-    "category": "code_analysis",
-    "query": "Check this code for issues:\n\ndef compute():\n    result = 1 + 1\n    return 42\n",
-    "expected_tool": "code_analysis",
-    "reference_answer": "Code is syntactically valid. ruff should flag F841 - local variable `result` is assigned but never used."
+    "id": "code_generation_04",
+    "category": "code_generation",
+    "query": "Write a function that capitalizes the first letter of each word in a sentence, then run it on 'the quick brown fox'.",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "The Quick Brown Fox",
+    "reference_answer": "Title-casing 'the quick brown fox' gives 'The Quick Brown Fox'."
   },
   {
-    "id": "code_analysis_05",
-    "category": "code_analysis",
-    "query": "Review this snippet:\n\nimport json\nimport sys\n\ndef parse(data):\n    return len(data)\n",
-    "expected_tool": "code_analysis",
-    "reference_answer": "Code is syntactically valid. ruff should flag F401 for both `json` and `sys` as unused imports."
+    "id": "code_generation_05",
+    "category": "code_generation",
+    "query": "Write a function that returns the nth Fibonacci number using iteration (not recursion), using the convention fib(0)=0 and fib(1)=1, then run it on n=10.",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "55",
+    "reference_answer": "Fibonacci sequence with fib(0)=0, fib(1)=1: 0,1,1,2,3,5,8,13,21,34,55 - fib(10) = 55."
   },
   {
-    "id": "code_analysis_06",
-    "category": "code_analysis",
-    "query": "Can you check this code for style issues?\n\ndef safe_divide(a, b):\n    try:\n        return a / b\n    except:\n        return None\n",
-    "expected_tool": "code_analysis",
-    "reference_answer": "Code is syntactically valid. ruff should flag E722 - do not use a bare `except`."
+    "id": "code_generation_06",
+    "category": "code_generation",
+    "query": "Write a function that merges two already-sorted lists of integers into one sorted list, then run it on [1, 3, 5] and [2, 4, 6].",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "[1, 2, 3, 4, 5, 6]",
+    "reference_answer": "Merging [1, 3, 5] and [2, 4, 6] in sorted order gives [1, 2, 3, 4, 5, 6]."
   },
   {
-    "id": "code_analysis_07",
-    "category": "code_analysis",
-    "query": "Review this function:\n\ndef is_missing(value):\n    if value == None:\n        return True\n    return False\n",
-    "expected_tool": "code_analysis",
-    "reference_answer": "Code is syntactically valid. ruff should flag SIM103 - the if/else that returns True/False should just return the condition (`value == None`) directly."
+    "id": "code_generation_07",
+    "category": "code_generation",
+    "query": "Write a C program that computes the sum of integers from 1 to n, then run it on n=100.",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "5050",
+    "reference_answer": "Sum of 1 through 100 is 100*101/2 = 5050."
   },
   {
-    "id": "code_analysis_08",
-    "category": "code_analysis",
-    "query": "Is this code clean?\n\ndef greet():\n    return f'Hello there'\n",
-    "expected_tool": "code_analysis",
-    "reference_answer": "Code is syntactically valid. ruff should flag F541 - an f-string with no placeholders (the f-prefix is unnecessary)."
+    "id": "code_generation_08",
+    "category": "code_generation",
+    "query": "Write a C program that checks whether a number is even or odd, then run it on 17.",
+    "expected_tool": "generate_and_verify_code",
+    "expected_output": "odd",
+    "reference_answer": "17 is odd - the program should print something indicating 'odd' (exact wording may vary, e.g. '17 is odd')."
   },
   {
-    "id": "programming_problem_01",
-    "category": "programming_problem",
-    "query": "Run this and tell me what it prints:\n\nprint(sum(range(10)))",
-    "expected_tool": "code_execution",
-    "reference_answer": "Prints 45 (the sum of 0 through 9), exit code 0, no errors."
+    "id": "web_fetch_01",
+    "category": "web_fetch",
+    "query": "Can you summarize what is on this page? https://peps.python.org/pep-0020/",
+    "expected_tool": "web_fetch",
+    "reference_answer": "PEP 20, 'The Zen of Python' by Tim Peters - a short list of 19 aphorisms guiding Python's design philosophy (e.g. 'Beautiful is better than ugly', 'Explicit is better than implicit', 'Simple is better than complex', 'Readability counts')."
   },
   {
-    "id": "programming_problem_02",
-    "category": "programming_problem",
-    "query": "What does this code output?\n\nfor i in range(3):\n    print(i * i)",
-    "expected_tool": "code_execution",
-    "reference_answer": "Prints 0, 1, and 4 on separate lines, exit code 0, no errors."
+    "id": "web_fetch_02",
+    "category": "web_fetch",
+    "query": "What is this page about? https://fastapi.tiangolo.com/",
+    "expected_tool": "web_fetch",
+    "reference_answer": "FastAPI's own homepage/landing page - describes FastAPI as a modern, fast (high-performance) Python web framework for building APIs, based on standard Python type hints."
   },
   {
-    "id": "programming_problem_03",
-    "category": "programming_problem",
-    "query": "Does this code raise an error?\n\nx = [1, 2, 3]\nprint(x[5])",
-    "expected_tool": "code_execution",
-    "reference_answer": "Yes - it raises an IndexError: list index out of range. Non-zero exit code, no stdout, traceback in stderr."
+    "id": "web_fetch_03",
+    "category": "web_fetch",
+    "query": "Summarize the content at https://www.python.org/about/",
+    "expected_tool": "web_fetch",
+    "reference_answer": "Python.org's 'About' page - general introduction to the Python programming language, its applications, and links to further resources about Python."
   },
   {
-    "id": "programming_problem_04",
-    "category": "programming_problem",
-    "query": "Run this and tell me the result:\n\ndef factorial(n):\n    return 1 if n == 0 else n * factorial(n - 1)\n\nprint(factorial(5))",
-    "expected_tool": "code_execution",
-    "reference_answer": "Prints 120 (5 factorial), exit code 0, no errors."
-  },
-  {
-    "id": "programming_problem_05",
-    "category": "programming_problem",
-    "query": "What happens when you run this?\n\nprint(10 / 0)",
-    "expected_tool": "code_execution",
-    "reference_answer": "Raises a ZeroDivisionError: division by zero. Non-zero exit code, no stdout, traceback in stderr."
-  },
-  {
-    "id": "programming_problem_06",
-    "category": "programming_problem",
-    "query": "Run this and report the output:\n\nnums = [3, 1, 4, 1, 5, 9, 2, 6]\nprint(sorted(nums))",
-    "expected_tool": "code_execution",
-    "reference_answer": "Prints [1, 1, 2, 3, 4, 5, 6, 9], exit code 0, no errors."
-  },
-  {
-    "id": "programming_problem_07",
-    "category": "programming_problem",
-    "query": "Check whether this code correctly reverses a string:\n\ns = 'hello'\nprint(s[::-1])",
-    "expected_tool": "code_execution",
-    "reference_answer": "Yes, it correctly reverses the string - prints 'olleh', exit code 0, no errors."
-  },
-  {
-    "id": "programming_problem_08",
-    "category": "programming_problem",
-    "query": "Run this and tell me what happens:\n\nimport json\nprint(json.loads('{invalid}'))",
-    "expected_tool": "code_execution",
-    "reference_answer": "Raises a json.decoder.JSONDecodeError because '{invalid}' is not valid JSON. Non-zero exit code, no stdout, traceback in stderr."
+    "id": "web_fetch_04",
+    "category": "web_fetch",
+    "query": "What does this page cover? https://docs.python.org/3/tutorial/index.html",
+    "expected_tool": "web_fetch",
+    "reference_answer": "The index/table of contents page of the official Python tutorial, listing the tutorial's chapters (an introduction to the Python language and standard library)."
   }
 ]
