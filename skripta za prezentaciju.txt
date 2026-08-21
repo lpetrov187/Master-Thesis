@@ -1,0 +1,30 @@
+1. Uvod ~ 1min
+	- U ovom projektu sam radio na LLM agentu koji ima sistem za izbor alata i za cilj da smanji halucinacije i bice evaluiran u odnosu na baseline varijantu istog LLM-a. Agent raspolaze sa 4 alata: pretraga dokumenata nad lokalnom dokumentacijom (trenutno FastAPI), statickom analizom koda, izvrsavanje koda u izolovanom okruzenju (sandbox) za Python i C i dohvatanjem i sumarizovanjem sadrzaja sa URL-a koji je korisnik dostavio. Sve ovo orkestrira pipeline koji cu ubrzo pokazati. Sistem tokom razgovora cuva kratkorocni kontekst tj ima memoriju i pamti prethodne promptove i odgovore.
+	- pokazi pipeline i ispricaj
+	- analyzer poziva LLM, odlucuje da li je potrebno koristiti tool ili ne - gleda da li je tool pretrazivanje teksta ili generisanje koda
+	- selector bira tool izmedju doc rag i web fetch zatim ide egzekucija koja kao output ima evidence data koji se koristi dalje za generisanje odgovora
+	- code generation loop za python i C jezik; sadrzi sintaksnu proveru koda i zatim izvrsava kod kako bi se uverio da se izvrsava bez greske - zatim salje na output
+	- na osnovu evidence generisanog (smanjuje halucinaicje jer je model instruktovan da na osnovu dokaza generise svoje odgovore) se generise konacan odgovor i ispisuje u terminal
+2. doc_rag prompt
+	1. PROMPT: 
+	- Agent prvo prepoznaje da pitanje zahteva proveru činjenica nad konkretnim tehničkim materijalom, pa poziva alat doc_rag. Taj alat radi embedding-based retrieval — pretvara upit u vektorsku reprezentaciju i pretražuje lokalni FastAPI korpus tražeći delove teksta (chunk-ove) čije je semantičko značenje najbliže postavljenom pitanju. Nakon toga sledi filtriranje po kosinusnoj udaljenosti (cosine-distance filtering): sistem odbacuje chunk-ove koji su ispod praga relevantnosti, tako da u dalju obradu ulaze samo delovi dokumentacije koji zaista odgovaraju temi pitanja.
+	- Ono što je ključno za smanjenje halucinacija jeste politika kontrolisanog pristupa (controlled-access policy): agent je ograničen da odgovor zasniva isključivo na sadržaju koji je alat vratio, a ne na sopstvenom generičkom znanju. Drugim rečima, model se ovde svesno "veže" za dohvaćeni tekst umesto da nagađa.
+	2. PROMPT: 
+3. code generation prompt
+	1. PROMPT: Write a function that sorts a list of integers, then show it working on [5, 2, 8, 1].
+	
+	- Agent prvo piše kod kao odgovor na postavljeni zadatak. Umesto da taj kod odmah prikaže korisniku kao gotov odgovor, on ga prosleđuje kroz dva alata koja proveravaju njegovu ispravnost — code_analysis i code_execution. To su alati koji su deo agentskog sistema i agent ih ovde jednostavno poziva direktno, u okviru sopstvenog procesa samoprovere.
+	- code_analysis vrši statičku proveru koda — traži sintaksne greške, sumnjive konstrukcije ili očigledne logičke propuste pre nego što se kod uopšte izvrši. code_execution zatim taj kod zaista pokreće u izolovanom okruženju i beleži stvarni izlaz
+
+	-  Ako je izlaz ispravan — kao što je slučaj ovde — petlja se tu zaustavlja i agent taj rezultat prosleđuje kao konačan odgovor. Revizija se pokreće isključivo ako je nešto zaista pogrešno, i tada agent radi tačno jedan ograničen (bounded) prolaz ispravke — nikako otvoren, ponavljajući proces pokušaja i grešaka bez kraja. Ovo ograničenje je namerno: sprečava agenta da upadne u beskonačnu petlju ispravljanja koda
+	- izlaz prompta je izlaz izvrsenog koda koji je ispisan u odgovoru, ne nesto sto je LLM izmislio
+4. code generation C prompt:
+	1. PROMPT: Write a C program that reverses a string, then run it on the string "hello".
+	- samo da se demonstrira C prompting
+5. web fetch prompt:
+	PROMPT: Can you summarize what is on this page? https://www.python.org/about/
+	- Korisnik ovde sam navodi tačan URL koji želi da agent dohvati. To nije slučajan detalj, već namerna arhitekturna odluka — agent nikada sam ne bira sa kog će sajta preuzeti informacije, niti pretražuje internet u potrazi za izvorom. On isključivo dohvata sadržaj sa adrese koju je korisnik eksplicitno naveo, ništa van toga.
+
+	- ukratko bih objasnio zasto sistem ne poseduje alat za otvorenu pretragu weba (open web-search), iako bi to na prvi pogled delovalo kao logicnije proširenje mogućnosti. Razlog je direktno vezan za centralnu ideju čitavog rada — kontrolisano zasnivanje odgovora (controlled-access grounding). Ako bi agent sam birao izvore sa interneta, gubila bi se mogućnost da se sa sigurnošću tvrdi da je odgovor zasnovan na proverenom, korisnikom odobrenom sadržaju. Otvorena pretraga bi uvela nepredvidljivost — agent bi mogao da nabasa na nepouzdan, zastareo ili čak namerno zavodljiv (adversarijalni) sadržaj, čime bi se narušila upravo ona garancija koju sistem pokušava da pruži: da je svaki odgovor koji koristi alate zasnovan na izvoru čiju pouzdanost je moguće pratiti i opravdati.
+
+	Drugim rečima, ovo ograničenje nije propust ili nedostatak funkcionalnosti, već svesna žrtva u korist pouzdanosti — manje autonomije agenta u izboru izvora, u zamenu za veću sigurnost da se ono što agent tvrdi zaista može povezati sa konkretnim, korisnikom potvrđenim materijalom.

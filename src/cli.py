@@ -15,54 +15,27 @@ from src.agent.baseline import run as run_baseline
 from src.agent.session import Session
 from src.tools.doc_rag import ingest
 
-
-def _print_timings(timings: dict) -> None:
-    print("[timings]")
-    for stage, secs in timings.items():
-        if secs is not None:
-            print(f"  {stage:18} {secs:6.2f}s")
-
-
-def _print_generation_details(evidence: dict) -> None:
-    """Show whether the code-generation loop actually did anything: how
-    many passes it took, and - if a revision fired - why, so it's clear
-    the agent isn't just reporting the first draft as-is."""
-    result = evidence.get("result")
-    if not result:
-        return
-
-    print(f"[code generation] language: {result['language']} | iterations: {result['iterations']}")
-    if result["revised"]:
-        print(f"  first attempt failed verification ({result['revision_reason']}) -> revised and re-verified")
-    elif result["revision_reason"] is not None:
-        print(f"  revision attempted but couldn't be applied ({result['revision_reason']})")
-    else:
-        print("  passed verification on the first attempt, no revision needed")
+_BANNER = """\
+============================================================
+  Master's Thesis Agent - Tool-Using LLM Pipeline
+============================================================
+  Tools available: doc_rag, code_analysis, code_execution, web_fetch
+  Type a question and press Enter.
+  Prefix a line with 'baseline: ' to run the no-tool baseline instead.
+  Type 'exit' or press Ctrl+C to quit.
+============================================================
+"""
 
 
 def _print_agent_result(trace: dict) -> None:
     tool = trace["selection"]["tool"] if trace["selection"] else "none"
-    verification = trace["verification"]
-
-    status = f"tool: {tool}"
-    if verification is not None:
-        status += f" | groundedness: {verification['groundedness_score']:.2f}"
-    if trace["retried"]:
-        status += " | retried"
-    if trace["error"]:
-        status += f" | ERROR: {trace['error']}"
-
-    print(f"\n[{status}]")
-    if tool == "generate_and_verify_code" and trace["evidence"]:
-        _print_generation_details(trace["evidence"])
-    print(trace["answer"])
-    print()
-    _print_timings(trace["timings"])
+    print(f"\n[tool: {tool}]")
+    print(trace["answer"] if trace["answer"] is not None else f"ERROR: {trace['error']}")
 
 
 def _print_baseline_result(trace: dict) -> None:
-    print("\n[baseline - no tools, no verification]")
-    print(f"ERROR: {trace['error']}" if trace["error"] else trace["answer"])
+    print("\n[tool: none (baseline)]")
+    print(trace["answer"] if trace["answer"] is not None else f"ERROR: {trace['error']}")
 
 
 def main() -> None:
@@ -70,8 +43,7 @@ def main() -> None:
     ingest()
     session = Session()
 
-    print("Agent CLI - type a question, or 'exit' to quit.")
-    print("Prefix a line with 'baseline: ' to run it through the no-tool baseline instead.\n")
+    print(_BANNER)
 
     while True:
         try:
